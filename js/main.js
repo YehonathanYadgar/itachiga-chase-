@@ -97,7 +97,7 @@ function startGame(cls) {
     overlayEl.innerHTML = `
       <h2>PAUSED</h2>
       <p>Click to resume</p>
-      <p class="sub">WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; Click shoot</p>`;
+      <p class="sub">WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; Click shoot &nbsp;|&nbsp; <b>SPACE</b> jump &nbsp;|&nbsp; <b>SHIFT</b> sprint</p>`;
     overlayEl.style.display = 'flex';
   });
 
