@@ -83,7 +83,10 @@ export class Shooter {
       this.raycaster.set(this.camera.position, dir);
       const hits = this.raycaster.intersectObjects(allMeshes, false);
 
-      if (hits.length > 0) {
+      const hitPoint = hits.length > 0 ? hits[0].point : null;
+      this._spawnTracer(this.camera.position, dir, hitPoint);
+
+      if (hitPoint) {
         const mesh       = hits[0].object;
         const localEnemy = enemies.find(e => e.meshes.includes(mesh));
         if (localEnemy) { localEnemy.hit(this.damage); anyHit = true; }
@@ -91,7 +94,7 @@ export class Shooter {
           remoteHitId = remoteMeshMap.get(mesh).id;
           anyHit = true;
         }
-        this._spawnFlash(hits[0].point, anyHit);
+        this._spawnFlash(hitPoint, anyHit);
       }
     }
 
@@ -104,14 +107,27 @@ export class Shooter {
   }
 
   _spawnFlash(point, isHit) {
-    const size  = isHit ? 0.16 : 0.07;
+    const size  = isHit ? 0.22 : 0.1;
     const color = isHit ? 0xff4400 : 0xffee88;
     const geo   = new THREE.SphereGeometry(size, 5, 5);
     const mat   = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
     const mesh  = new THREE.Mesh(geo, mat);
     mesh.position.copy(point);
     this.scene.add(mesh);
-    this._flashes.push({ mesh, ttl: 3, maxTtl: 3 });
+    this._flashes.push({ mesh, ttl: 6, maxTtl: 6 });
+  }
+
+  _spawnTracer(origin, direction, hitPoint) {
+    const end = hitPoint
+      ? hitPoint.clone()
+      : origin.clone().addScaledVector(direction, 150);
+    // Start slightly in front of camera so it doesn't clip the near plane
+    const start = origin.clone().addScaledVector(direction, 0.4);
+    const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const mat = new THREE.LineBasicMaterial({ color: 0xffee44, transparent: true, opacity: 0.9 });
+    const line = new THREE.Line(geo, mat);
+    this.scene.add(line);
+    this._flashes.push({ mesh: line, ttl: 10, maxTtl: 10 });
   }
 
   update(delta) {

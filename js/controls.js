@@ -56,7 +56,7 @@ export class Controls {
 
   /** Instant camera pitch kick (recoil) */
   addRecoil(amount) {
-    this.camera.rotation.x -= amount;
+    this.camera.rotation.x += amount;
   }
 
   update(delta) {
