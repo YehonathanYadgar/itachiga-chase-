@@ -191,7 +191,7 @@ function startGame(cls) {
       crosshair.setSpread(Math.min(1, controls.moveSpeed / maxSpd));
 
       if (mouseDown) doShoot();
-      shooter.update();
+      shooter.update(delta);
       ui.update(playerHealth, cls.health, shooter.ammo, shooter.maxAmmo);
     }
 

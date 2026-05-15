@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+const BULLET_SPEED  = 180;   // units per second — fast but visible
+const BULLET_SIZE   = 0.055; // radius of the tracer sphere
+
 export class Shooter {
   constructor(scene, camera) {
     this.scene     = scene;
@@ -7,20 +10,20 @@ export class Shooter {
     this.raycaster = new THREE.Raycaster();
     this.raycaster.far = 300;
 
-    // Weapon stats (set by configure)
     this.damage   = 20;
     this.fireRate = 300;
     this.spread   = 0.04;
     this.pellets  = 1;
+    this.recoil   = 0.018;
     this.ammo     = Infinity;
     this.maxAmmo  = Infinity;
     this._lastShot = 0;
 
-    // Short-lived impact flashes (no trails — instant feedback)
-    this._flashes = [];
+    this._bullets = [];  // moving tracer bullets
+    this._flashes = [];  // hit impact flashes
 
     this.onShot   = null;
-    this.controls = null;  // used only for moveSpeed spread check
+    this.controls = null;
   }
 
   configure(cls) {
@@ -28,6 +31,7 @@ export class Shooter {
     this.fireRate = cls.fireRate;
     this.spread   = cls.spread;
     this.pellets  = cls.pellets ?? 1;
+    this.recoil   = cls.recoil ?? 0.018;
     this.ammo     = cls.ammo;
     this.maxAmmo  = cls.ammo;
   }
@@ -43,6 +47,9 @@ export class Shooter {
     this._lastShot = now;
     if (this.ammo !== Infinity) this.ammo--;
 
+    // Recoil — kick sight upward
+    if (this.controls) this.controls.addRecoil(this.recoil);
+
     let anyHit      = false;
     let remoteHitId = null;
 
@@ -51,8 +58,7 @@ export class Shooter {
     const allMeshes    = [...localMeshes, ...remoteMeshes];
 
     for (let p = 0; p < this.pellets; p++) {
-      // First pellet (or only pellet) always goes dead center — exactly where you aim.
-      // Extra shotgun pellets spread around the center.
+      // First pellet always goes dead center; extra pellets (shotgun) spread
       const offsetX = p === 0 ? 0 : (Math.random() - 0.5) * this.spread * 2;
       const offsetY = p === 0 ? 0 : (Math.random() - 0.5) * this.spread * 2;
       const dir = new THREE.Vector3(offsetX, offsetY, -1)
@@ -60,6 +66,8 @@ export class Shooter {
 
       this.raycaster.set(this.camera.position, dir);
       const hits = this.raycaster.intersectObjects(allMeshes, false);
+
+      const from = this.camera.position.clone();
 
       if (hits.length > 0) {
         const mesh       = hits[0].object;
@@ -69,7 +77,12 @@ export class Shooter {
           remoteHitId = remoteMeshMap.get(mesh).id;
           anyHit = true;
         }
-        this._spawnFlash(hits[0].point, anyHit);
+        this._spawnBullet(from, hits[0].point, dir);
+        this._spawnFlash(hits[0].point);
+      } else {
+        // Bullet goes to max range
+        const to = from.clone().addScaledVector(dir, 120);
+        this._spawnBullet(from, to, dir);
       }
     }
 
@@ -78,18 +91,45 @@ export class Shooter {
     return result;
   }
 
-  _spawnFlash(point, isHit) {
-    const size  = isHit ? 0.16 : 0.07;
-    const color = isHit ? 0xff4400 : 0xffee88;
-    const geo   = new THREE.SphereGeometry(size, 5, 5);
-    const mat   = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
-    const mesh  = new THREE.Mesh(geo, mat);
-    mesh.position.copy(point);
+  /** Bright moving tracer bullet */
+  _spawnBullet(from, to, dir) {
+    const geo  = new THREE.SphereGeometry(BULLET_SIZE, 5, 5);
+    const mat  = new THREE.MeshBasicMaterial({ color: 0xffee00, transparent: true, opacity: 0.95 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(from);
     this.scene.add(mesh);
-    this._flashes.push({ mesh, ttl: 3, maxTtl: 3 });
+
+    const dist = from.distanceTo(to);
+    this._bullets.push({ mesh, dir: dir.clone(), dist, traveled: 0 });
   }
 
-  update() {
+  /** Small flash at impact point */
+  _spawnFlash(point) {
+    const geo  = new THREE.SphereGeometry(0.18, 5, 5);
+    const mat  = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 1 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(point);
+    this.scene.add(mesh);
+    this._flashes.push({ mesh, ttl: 4, maxTtl: 4 });
+  }
+
+  update(delta) {
+    // Move tracer bullets
+    const step = BULLET_SPEED * delta;
+    for (let i = this._bullets.length - 1; i >= 0; i--) {
+      const b = this._bullets[i];
+      b.traveled += step;
+      b.mesh.position.addScaledVector(b.dir, step);
+
+      if (b.traveled >= b.dist) {
+        this.scene.remove(b.mesh);
+        b.mesh.geometry.dispose();
+        b.mesh.material.dispose();
+        this._bullets.splice(i, 1);
+      }
+    }
+
+    // Fade impact flashes
     for (let i = this._flashes.length - 1; i >= 0; i--) {
       const f = this._flashes[i];
       f.ttl--;
