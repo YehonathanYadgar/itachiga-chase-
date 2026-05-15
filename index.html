@@ -1,299 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Itachiga Chase</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #1a1a2e;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            font-family: Arial, sans-serif;
-            color: white;
-        }
-        h1 {
-            margin-bottom: 10px;
-            font-size: 1.4rem;
-            color: #e94560;
-            letter-spacing: 2px;
-        }
-        canvas {
-            border: 3px solid #e94560;
-            border-radius: 8px;
-            background: #16213e;
-        }
-        #controls {
-            margin-top: 10px;
-            font-size: 0.85rem;
-            color: #aaa;
-            display: flex;
-            gap: 20px;
-        }
-        #controls span {
-            background: #0f3460;
-            padding: 4px 10px;
-            border-radius: 4px;
-        }
-        #status {
-            margin-top: 8px;
-            font-size: 1rem;
-            min-height: 24px;
-            color: #f5a623;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Friend Shooter 🎯</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- PeerJS — free P2P signalling, no server needed -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
-    <h1>itachinga server גואב</h1>
-    <canvas id="gameCanvas" width="800" height="300"></canvas>
-    <div id="controls">
-        <span>⬅️➡️ תזוזה</span>
-        <span>SPACE קפיצה</span>
-        <span>SHIFT ספרינט</span>
+
+  <!-- CLASS SELECT -->
+  <div id="class-select">
+    <h1>🎯 FRIEND SHOOTER</h1>
+    <p class="sub">Choose your fighter</p>
+    <div id="class-grid"></div>
+  </div>
+
+  <!-- POINTER LOCK OVERLAY (innerHTML gets replaced on pause — keep invite outside) -->
+  <div id="overlay" style="display:none">
+    <h2>Click anywhere to Play</h2>
+    <p>WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; Click shoot &nbsp;|&nbsp; <b>SPACE</b> jump &nbsp;|&nbsp; <b>SHIFT</b> sprint</p>
+    <p class="sub">ESC to pause</p>
+  </div>
+
+  <!-- INVITE PANEL — separate div, never clobbered -->
+  <div id="invite-panel" style="display:none">
+    <span>🔗 Invite friends:</span>
+    <span id="overlay-invite-url"></span>
+    <button id="overlay-invite-copy">Copy link</button>
+    <span id="overlay-peers"></span>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" style="display:none">
+
+    <div id="crosshair"></div>
+    <div id="hitmarker">✕</div>
+    <div id="muzzle-flash"></div>
+    <div id="damage-flash"></div>
+
+    <!-- Invite bar (shown after connecting) -->
+    <div id="invite-bar" style="display:none">
+      <span>🔗 Invite:</span>
+      <span id="invite-url"></span>
+      <button id="invite-copy">Copy</button>
     </div>
-    <div id="status">לחץ כדי להתחיל!</div>
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const statusEl = document.getElementById('status');
+    <!-- Status + kill feed -->
+    <div id="mp-status">Connecting...</div>
+    <div id="kill-feed"></div>
 
-        const GROUND = canvas.height - 60;
-        const GRAVITY = 0.6;
+    <!-- Bottom bar -->
+    <div id="bottom-hud">
+      <div class="hud-block">
+        <span class="hud-label">HP</span>
+        <span id="hp" class="hud-value">100</span>
+      </div>
+      <div class="hud-block center">
+        <span id="class-name" class="hud-value">-</span>
+        <span id="weapon-name" class="hud-label">-</span>
+      </div>
+      <div class="hud-block right">
+        <span class="hud-label">KILLS</span>
+        <span id="kills" class="hud-value">0</span>
+        <span class="hud-label" style="margin-top:6px">AMMO</span>
+        <span id="ammo" class="hud-value">∞</span>
+      </div>
+    </div>
 
-        // --- Player ---
-        const player = {
-            x: 80,
-            y: GROUND,
-            w: 40,
-            h: 40,
-            vx: 0,
-            vy: 0,
-            speed: 4,
-            sprintSpeed: 8,
-            onGround: true,
-            isSprinting: false,
-            color: '#4fc3f7',
-        };
+  </div>
 
-        // --- Enemies ---
-        function spawnEnemy() {
-            return {
-                x: canvas.width + 20,
-                y: GROUND,
-                w: 36,
-                h: 36,
-                speed: 2 + Math.random() * 1.5,
-                color: '#e94560',
-            };
-        }
-
-        let enemies = [spawnEnemy()];
-        let spawnTimer = 0;
-        const SPAWN_INTERVAL = 180;
-
-        // --- Keys ---
-        const keys = {};
-        document.addEventListener('keydown', e => {
-            keys[e.code] = true;
-            if (e.code === 'Space') e.preventDefault();
-        });
-        document.addEventListener('keyup', e => keys[e.code] = false);
-
-        // --- Game state ---
-        let started = false;
-        let gameOver = false;
-        let score = 0;
-        let frameCount = 0;
-
-        canvas.addEventListener('click', () => {
-            if (!started || gameOver) restart();
-        });
-        document.addEventListener('keydown', e => {
-            if (!started || gameOver) restart();
-        });
-
-        function restart() {
-            started = true;
-            gameOver = false;
-            score = 0;
-            frameCount = 0;
-            player.x = 80;
-            player.y = GROUND;
-            player.vx = 0;
-            player.vy = 0;
-            player.onGround = true;
-            enemies = [spawnEnemy()];
-            spawnTimer = 0;
-            statusEl.textContent = '';
-            loop();
-        }
-
-        // --- Drawing helpers ---
-        function drawDog(x, y, w, h, color, sprinting) {
-            ctx.fillStyle = color;
-            // body
-            ctx.fillRect(x, y, w, h * 0.6);
-            // head
-            ctx.fillRect(x + w * 0.6, y - h * 0.3, w * 0.4, h * 0.4);
-            // ears
-            ctx.fillRect(x + w * 0.65, y - h * 0.5, w * 0.12, h * 0.25);
-            ctx.fillRect(x + w * 0.85, y - h * 0.5, w * 0.12, h * 0.25);
-            // legs (animated when sprinting)
-            const legOffset = sprinting ? Math.sin(frameCount * 0.4) * 6 : Math.sin(frameCount * 0.2) * 3;
-            ctx.fillRect(x + 4, y + h * 0.55, 8, h * 0.35 + legOffset);
-            ctx.fillRect(x + w * 0.45, y + h * 0.55, 8, h * 0.35 - legOffset);
-            // tail
-            ctx.fillRect(x - 8, y + 2, 10, 5);
-        }
-
-        function drawEnemy(e) {
-            ctx.fillStyle = e.color;
-            // body
-            ctx.fillRect(e.x, e.y, e.w, e.h * 0.6);
-            // head
-            ctx.fillRect(e.x + e.w * 0.6, e.y - e.h * 0.3, e.w * 0.4, e.h * 0.4);
-            // ears (pointy)
-            ctx.fillStyle = '#ff6b6b';
-            ctx.beginPath();
-            ctx.moveTo(e.x + e.w * 0.62, e.y - e.h * 0.3);
-            ctx.lineTo(e.x + e.w * 0.7, e.y - e.h * 0.55);
-            ctx.lineTo(e.x + e.w * 0.78, e.y - e.h * 0.3);
-            ctx.fill();
-            ctx.fillStyle = e.color;
-            // legs
-            ctx.fillRect(e.x + 4, e.y + e.h * 0.55, 7, e.h * 0.35);
-            ctx.fillRect(e.x + e.w * 0.45, e.y + e.h * 0.55, 7, e.h * 0.35);
-        }
-
-        function drawGround() {
-            ctx.fillStyle = '#2d5016';
-            ctx.fillRect(0, GROUND + 40, canvas.width, canvas.height - GROUND - 40);
-            ctx.fillStyle = '#3a6b1a';
-            ctx.fillRect(0, GROUND + 38, canvas.width, 6);
-        }
-
-        function drawHUD() {
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 18px Arial';
-            ctx.fillText('ניקוד: ' + score, 10, 28);
-
-            if (player.isSprinting) {
-                ctx.fillStyle = '#f5a623';
-                ctx.font = 'bold 14px Arial';
-                ctx.fillText('⚡ SPRINT', canvas.width - 90, 28);
-            }
-        }
-
-        // --- Collision ---
-        function rectsOverlap(a, b) {
-            return a.x < b.x + b.w &&
-                   a.x + a.w > b.x &&
-                   a.y < b.y + b.h &&
-                   a.y + a.h > b.y;
-        }
-
-        // --- Main loop ---
-        let animId;
-        function loop() {
-            if (gameOver) return;
-            animId = requestAnimationFrame(loop);
-            frameCount++;
-
-            // Input
-            player.isSprinting = keys['ShiftLeft'] || keys['ShiftRight'];
-            const currentSpeed = player.isSprinting ? player.sprintSpeed : player.speed;
-
-            if (keys['ArrowLeft'] || keys['KeyA'])  player.vx = -currentSpeed;
-            else if (keys['ArrowRight'] || keys['KeyD']) player.vx = currentSpeed;
-            else player.vx = 0;
-
-            if ((keys['Space']) && player.onGround) {
-                player.vy = -13;
-                player.onGround = false;
-            }
-
-            // Physics
-            player.vy += GRAVITY;
-            player.x += player.vx;
-            player.y += player.vy;
-
-            // Ground collision
-            if (player.y >= GROUND) {
-                player.y = GROUND;
-                player.vy = 0;
-                player.onGround = true;
-            }
-
-            // Wall bounds
-            if (player.x < 0) player.x = 0;
-            if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
-
-            // Enemies
-            spawnTimer++;
-            if (spawnTimer >= SPAWN_INTERVAL) {
-                enemies.push(spawnEnemy());
-                spawnTimer = 0;
-            }
-
-            for (let e of enemies) {
-                e.x -= e.speed;
-            }
-            enemies = enemies.filter(e => e.x + e.w > -20);
-
-            // Collision check
-            for (let e of enemies) {
-                const playerRect = { x: player.x + 4, y: player.y - player.h * 0.3, w: player.w - 8, h: player.h + player.h * 0.3 };
-                const enemyRect  = { x: e.x + 4, y: e.y - e.h * 0.3, w: e.w - 8, h: e.h + e.h * 0.3 };
-                if (rectsOverlap(playerRect, enemyRect)) {
-                    triggerGameOver();
-                    return;
-                }
-            }
-
-            score = Math.floor(frameCount / 10);
-
-            // Draw
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawGround();
-            for (let e of enemies) drawEnemy(e);
-            drawDog(player.x, player.y, player.w, player.h, player.color, player.isSprinting);
-            drawHUD();
-        }
-
-        function triggerGameOver() {
-            gameOver = true;
-            ctx.fillStyle = 'rgba(0,0,0,0.6)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#e94560';
-            ctx.font = 'bold 48px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
-            ctx.fillStyle = 'white';
-            ctx.font = '22px Arial';
-            ctx.fillText('ניקוד: ' + score, canvas.width / 2, canvas.height / 2 + 20);
-            ctx.font = '16px Arial';
-            ctx.fillStyle = '#aaa';
-            ctx.fillText('לחץ כדי לשחק שוב', canvas.width / 2, canvas.height / 2 + 55);
-            ctx.textAlign = 'left';
-            statusEl.textContent = 'ניסיון נוסף?';
-        }
-
-        // Draw start screen
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#4fc3f7';
-        ctx.font = 'bold 36px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('🐕 Itachiga Chase 🐕', canvas.width / 2, canvas.height / 2 - 10);
-        ctx.fillStyle = '#aaa';
-        ctx.font = '18px Arial';
-        ctx.fillText('לחץ כדי להתחיל', canvas.width / 2, canvas.height / 2 + 30);
-        ctx.textAlign = 'left';
-    </script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
