@@ -186,6 +186,21 @@ function startGame(cls) {
     setTimeout(() => { playerHealth = cls.health; }, 5000);
   };
 
+  // ── Reload callbacks ──────────────────────────────────────
+  shooter.onReloadStart = () => {
+    viewmodel.reload(cls.reloadTime ?? 2200);
+  };
+  shooter.onReloadComplete = () => {
+    // ammo display updates automatically via ui.update()
+  };
+
+  // R key → manual reload
+  document.addEventListener('keydown', e => {
+    if (e.code === 'KeyR' && controls.locked && !shooter.isReloading) {
+      shooter.startReload();
+    }
+  });
+
   // ── Shooting ──────────────────────────────────────────────
   shooter.onShot = ({ hit, remoteHitId }) => {
     ui.showFlash();
@@ -220,10 +235,11 @@ function startGame(cls) {
       const maxSpd = cls.speed * 1.65;
       crosshair.setSpread(Math.min(1, controls.moveSpeed / maxSpd));
 
-      if (mouseDown) doShoot();
-      shooter.update();
+      if (mouseDown && !shooter.isReloading) doShoot();
+      shooter.update(delta);
       viewmodel.update(delta, controls.moveSpeed);
-      ui.update(playerHealth, cls.health, shooter.ammo, shooter.maxAmmo);
+      const ammoDisplay = shooter.isReloading ? 'RELOADING...' : null;
+      ui.update(playerHealth, cls.health, shooter.ammo, shooter.maxAmmo, ammoDisplay);
     }
 
     // Always update crosshair FOV lerp (even when not locked, so zoom is smooth)

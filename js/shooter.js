@@ -7,48 +7,62 @@ export class Shooter {
     this.raycaster = new THREE.Raycaster();
     this.raycaster.far = 300;
 
-    // Weapon stats (set by configure)
-    this.damage   = 20;
-    this.fireRate = 300;
-    this.spread   = 0.04;
-    this.pellets  = 1;
-    this.ammo     = Infinity;
-    this.maxAmmo  = Infinity;
-    this.recoil   = 0.02;
-    this._lastShot = 0;
+    this.damage     = 20;
+    this.fireRate   = 300;
+    this.spread     = 0.04;
+    this.pellets    = 1;
+    this.ammo       = Infinity;
+    this.maxAmmo    = Infinity;
+    this.recoil     = 0.02;
+    this.reloadTime = 0;      // ms, 0 = no reload
+    this._lastShot  = 0;
+    this._reloading = false;
+    this._reloadTimer = 0;    // seconds remaining
 
-    // Short-lived impact flashes (no trails — instant feedback)
     this._flashes = [];
 
-    this.onShot   = null;
-    this.controls = null;  // injected from main.js after construction
+    this.onShot           = null;
+    this.onReloadStart    = null;
+    this.onReloadComplete = null;
+    this.controls         = null;
   }
 
   configure(cls) {
-    this.damage   = cls.damage;
-    this.fireRate = cls.fireRate;
-    this.spread   = cls.spread;
-    this.pellets  = cls.pellets ?? 1;
-    this.ammo     = cls.ammo;
-    this.maxAmmo  = cls.ammo;
-    this.recoil   = cls.recoil ?? 0.018;
+    this.damage     = cls.damage;
+    this.fireRate   = cls.fireRate;
+    this.spread     = cls.spread;
+    this.pellets    = cls.pellets ?? 1;
+    this.ammo       = cls.ammo;
+    this.maxAmmo    = cls.ammo;
+    this.recoil     = cls.recoil ?? 0.018;
+    this.reloadTime = cls.reloadTime ?? 0;
   }
 
+  get isReloading() { return this._reloading; }
+
   canShoot(now) {
-    return now - this._lastShot >= this.fireRate;
+    return !this._reloading && now - this._lastShot >= this.fireRate;
+  }
+
+  startReload() {
+    if (this._reloading || this.ammo === Infinity || this.ammo === this.maxAmmo) return;
+    this._reloading   = true;
+    this._reloadTimer = this.reloadTime / 1000;
+    if (this.onReloadStart) this.onReloadStart();
   }
 
   tryShoot(enemies, now, remoteMeshMap = new Map()) {
     if (!this.canShoot(now)) return false;
-    if (this.ammo !== Infinity && this.ammo <= 0) return false;
+    if (this.ammo !== Infinity && this.ammo <= 0) {
+      this.startReload();
+      return false;
+    }
 
     this._lastShot = now;
     if (this.ammo !== Infinity) this.ammo--;
 
-    // Instant recoil kick
     if (this.controls) this.controls.addRecoil(this.recoil);
 
-    // Spread increases while moving
     const moving = this.controls && this.controls.moveSpeed > 0.4;
     const spread = moving ? this.spread * 1.75 : this.spread;
 
@@ -81,6 +95,9 @@ export class Shooter {
       }
     }
 
+    // Auto-reload on last bullet
+    if (this.ammo === 0 && this.reloadTime > 0) this.startReload();
+
     const result = { hit: anyHit, remoteHitId };
     if (this.onShot) this.onShot(result);
     return result;
@@ -97,7 +114,18 @@ export class Shooter {
     this._flashes.push({ mesh, ttl: 3, maxTtl: 3 });
   }
 
-  update() {
+  update(delta) {
+    // Reload countdown
+    if (this._reloading && delta) {
+      this._reloadTimer -= delta;
+      if (this._reloadTimer <= 0) {
+        this._reloading = false;
+        this.ammo = this.maxAmmo;
+        if (this.onReloadComplete) this.onReloadComplete();
+      }
+    }
+
+    // Flash fade
     for (let i = this._flashes.length - 1; i >= 0; i--) {
       const f = this._flashes[i];
       f.ttl--;

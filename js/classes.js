@@ -44,13 +44,14 @@ export const CLASSES = [
     crosshairId:  'smg',       // green diamond crosshair
     health:       90,
     speed:        13,
-    damage:       12,
-    fireRate:     75,           // very fast SMG
-    recoil:       0.008,
+    damage:       18,
+    fireRate:     110,
+    recoil:       0.014,
     weapon:       'AK-47',
     pellets:      1,
-    spread:       0.07,
-    ammo:         Infinity,
+    spread:       0.05,
+    ammo:         30,
+    reloadTime:   2200,
     desc:         'Runs faster than he thinks'
   },
   {
