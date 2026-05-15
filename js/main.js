@@ -56,7 +56,6 @@ for (const cls of CLASSES) {
 
 // ── Game ──────────────────────────────────────────────────────
 function startGame(cls) {
-  if (musicOn) { menuMusic.pause(); menuMusic.currentTime = 0; }
   selectEl.style.display = 'none';
   overlayEl.style.display = 'flex';
 
@@ -123,6 +122,7 @@ function startGame(cls) {
   });
 
   controls.plc.addEventListener('lock', () => {
+    if (musicOn) { menuMusic.pause(); menuMusic.currentTime = 0; musicOn = false; }
     overlayEl.style.display = 'none';
     hudEl.style.display = 'block';
     ui.setStatus(network.isHost ? '🟢 Hosting' : '🟢 Connected');
