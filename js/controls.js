@@ -55,7 +55,7 @@ export class Controls {
     return Math.sqrt(this._velX * this._velX + this._velZ * this._velZ);
   }
 
-  /** Kick the camera UP — positive = sight goes up (correct recoil direction) */
+  /** Kick sight UPWARD on each shot — positive = look up in YXZ euler */
   addRecoil(amount) {
     this.camera.rotation.x += amount;
   }
