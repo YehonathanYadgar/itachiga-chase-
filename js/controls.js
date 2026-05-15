@@ -23,13 +23,7 @@ export class Controls {
     this._velX    = 0;
     this._velZ    = 0;
     this._vy      = 0;
-    this._baseY   = EYE_HEIGHT;
     this.onGround = true;
-
-    // Visual feel
-    this._bob        = 0;
-    this._bobAmp     = 0;
-    this._landSquish = 0;
 
     this.plc.addEventListener('lock',   () => { this.locked = true;  });
     this.plc.addEventListener('unlock', () => { this.locked = false; });
@@ -103,29 +97,13 @@ export class Controls {
       this.camera.position.z + this._velZ * delta));
 
     // ── Gravity & jump ─────────────────────────────
-    this._vy   -= GRAVITY * delta;
-    this._baseY += this._vy * delta;
+    this._vy -= GRAVITY * delta;
+    this.camera.position.y += this._vy * delta;
 
-    if (this._baseY <= EYE_HEIGHT) {
-      if (this._vy < -5) this._landSquish = Math.min(0.07, -this._vy * 0.005);
-      this._baseY   = EYE_HEIGHT;
+    if (this.camera.position.y <= EYE_HEIGHT) {
+      this.camera.position.y = EYE_HEIGHT;
       this._vy      = 0;
       this.onGround = true;
     }
-
-    // ── Head bob ───────────────────────────────────
-    const spd = this.moveSpeed;
-    if (this.onGround && spd > 0.4) {
-      this._bob    += delta * (this.isSprinting ? 14 : 10);
-      this._bobAmp  = Math.min(0.028, this._bobAmp + delta * 5);
-    } else {
-      this._bobAmp  = Math.max(0, this._bobAmp - delta * 10);
-    }
-
-    // Landing squish fade
-    this._landSquish = Math.max(0, this._landSquish - delta * 0.7);
-
-    this.camera.position.y =
-      this._baseY + Math.sin(this._bob) * this._bobAmp - this._landSquish;
   }
 }
