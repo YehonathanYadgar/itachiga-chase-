@@ -97,22 +97,166 @@ canvas { display: block; }
   --class-color: #ffffff;
 }
 
-/* Crosshair */
+/* ── CROSSHAIR BASE ───────────────────────────────────── */
 #crosshair {
   position: absolute; top: 50%; left: 50%;
-  width: 22px; height: 22px;
+  width: 0; height: 0;
   transform: translate(-50%, -50%);
+  /* Default gap and size — overridden per weapon + per frame */
+  --ch-gap:   6px;
+  --ch-size:  11px;
+  --ch-thick: 2px;
+  --ch-color: rgba(255, 255, 255, 0.92);
 }
-#crosshair::before, #crosshair::after {
-  content: '';
-  position: absolute; background: rgba(255,255,255,0.85);
+
+/* The four arms */
+#crosshair .ch-top,
+#crosshair .ch-bottom,
+#crosshair .ch-left,
+#crosshair .ch-right {
+  position: absolute;
+  background: var(--ch-color);
   border-radius: 1px;
-  box-shadow: 0 0 3px rgba(0,0,0,0.9);
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.9));
+  transition: none;
 }
-/* horizontal bar */
-#crosshair::before { width: 22px; height: 2px; top: 10px; left: 0; }
-/* vertical bar */
-#crosshair::after  { width: 2px; height: 22px; top: 0; left: 10px; }
+/* Vertical arms */
+#crosshair .ch-top,
+#crosshair .ch-bottom { width: var(--ch-thick); height: var(--ch-size); left: calc(var(--ch-thick) / -2); }
+/* Horizontal arms */
+#crosshair .ch-left,
+#crosshair .ch-right  { height: var(--ch-thick); width: var(--ch-size); top: calc(var(--ch-thick) / -2); }
+
+#crosshair .ch-top    { bottom: var(--ch-gap); }
+#crosshair .ch-bottom { top:    var(--ch-gap); }
+#crosshair .ch-left   { right:  var(--ch-gap); }
+#crosshair .ch-right  { left:   var(--ch-gap); }
+
+/* Center dot */
+#crosshair .ch-dot {
+  position: absolute;
+  width: 3px; height: 3px;
+  background: var(--ch-color);
+  border-radius: 50%;
+  left: -1.5px; top: -1.5px;
+}
+
+/* Circle (shotgun only) */
+#crosshair .ch-circle {
+  display: none;
+  position: absolute;
+  border: 2px solid var(--ch-color);
+  border-radius: 50%;
+  left: 50%; top: 50%;
+  /* size driven by --ch-gap */
+  width:  calc(var(--ch-gap) * 3.5);
+  height: calc(var(--ch-gap) * 3.5);
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.9));
+}
+
+/* ── MINIGUN — red, medium thickness ─────────────────── */
+#crosshair.ch-minigun {
+  --ch-color: rgba(255, 90, 90, 0.92);
+  --ch-size:  12px;
+  --ch-thick: 2px;
+  --ch-gap:   7px;
+}
+
+/* ── SNIPER — thin cyan lines, small dot ─────────────── */
+#crosshair.ch-sniper {
+  --ch-color: rgba(0, 215, 255, 0.95);
+  --ch-size:  9px;
+  --ch-thick: 1px;
+  --ch-gap:   9px;
+}
+#crosshair.ch-sniper .ch-dot {
+  width: 4px; height: 4px;
+  left: -2px; top: -2px;
+  background: rgba(0, 255, 190, 1);
+  box-shadow: 0 0 5px rgba(0, 255, 190, 0.8);
+}
+
+/* ── SMG — green, tight, slightly shorter ────────────── */
+#crosshair.ch-smg {
+  --ch-color: rgba(120, 255, 80, 0.92);
+  --ch-size:  8px;
+  --ch-thick: 2px;
+  --ch-gap:   5px;
+}
+
+/* ── SHOTGUN — orange circle, no arms ───────────────── */
+#crosshair.ch-shotgun {
+  --ch-color: rgba(255, 155, 0, 0.88);
+}
+#crosshair.ch-shotgun .ch-top,
+#crosshair.ch-shotgun .ch-bottom,
+#crosshair.ch-shotgun .ch-left,
+#crosshair.ch-shotgun .ch-right { display: none; }
+#crosshair.ch-shotgun .ch-dot  { display: none; }
+#crosshair.ch-shotgun .ch-circle { display: block; }
+
+/* ── SCOPE OVERLAY (sniper RMB) ──────────────────────── */
+#scope-overlay {
+  position: fixed; inset: 0; z-index: 35;
+  display: none;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+}
+
+/* Heavy black vignette with circular clear window */
+.scope-mask {
+  position: absolute; inset: 0;
+  background: radial-gradient(
+    circle 175px at 50% 50%,
+    transparent      168px,
+    rgba(4,4,8,0.97) 175px
+  );
+}
+
+/* Scope ring border */
+.scope-ring {
+  position: absolute; top: 50%; left: 50%;
+  width: 350px; height: 350px;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(200, 200, 200, 0.35);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.7), inset 0 0 20px rgba(0,0,0,0.3);
+}
+
+/* Full-width crosshair lines inside scope */
+.scope-h, .scope-v {
+  position: absolute;
+  top: 50%; left: 50%;
+  background: rgba(255, 255, 255, 0.55);
+}
+.scope-h { width: 344px; height: 1px; transform: translate(-50%, -50%); }
+.scope-v { width: 1px; height: 344px; transform: translate(-50%, -50%); }
+
+/* Range ticks on horizontal line */
+.scope-tick {
+  position: absolute;
+  top: 50%; left: 50%;
+  background: rgba(255, 255, 255, 0.5);
+}
+/* Left/right ticks at ±60px and ±120px */
+.scope-tick-l, .scope-tick-r { width: 1px; height: 14px; transform: translate(-50%, -50%); }
+.scope-tick-u, .scope-tick-d { height: 1px; width: 14px; transform: translate(-50%, -50%); }
+.scope-tick-l { margin-left: -60px; }
+.scope-tick-r { margin-left:  60px; }
+.scope-tick-u { margin-top:  -60px; }
+.scope-tick-d { margin-top:   60px; }
+
+/* Red center dot */
+.scope-dot {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 5px; height: 5px;
+  background: rgba(255, 40, 40, 0.95);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px rgba(255, 0, 0, 0.7);
+}
 
 /* Hitmarker */
 #hitmarker {

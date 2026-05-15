@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { CLASSES } from './classes.js';
-import { createScene } from './scene.js';
-import { Controls } from './controls.js';
-import { Shooter } from './shooter.js';
+import { CLASSES }      from './classes.js';
+import { createScene }  from './scene.js';
+import { Controls }     from './controls.js';
+import { Shooter }      from './shooter.js';
+import { Crosshair }    from './crosshair.js';
 import { spawnEnemies } from './enemies.js';
-import { UI } from './ui.js';
-import { Network } from './network.js';
+import { UI }           from './ui.js';
+import { Network }      from './network.js';
 
 // ── Class select ──────────────────────────────────────────────
 const selectEl  = document.getElementById('class-select');
@@ -40,11 +41,15 @@ function startGame(cls) {
   overlayEl.style.display = 'flex';
 
   const { scene, camera, renderer } = createScene();
-  const controls = new Controls(camera, renderer.domElement);
-  controls.speed = cls.speed;
+  const controls  = new Controls(camera, renderer.domElement);
+  controls.speed  = cls.speed;
 
-  const shooter  = new Shooter(scene, camera);
+  const shooter   = new Shooter(scene, camera);
   shooter.configure(cls);
+  shooter.controls = controls;   // ← lets shooter read moveSpeed for spread
+
+  const crosshair = new Crosshair(camera);
+  crosshair.setWeapon(cls);
 
   const enemies  = spawnEnemies(scene);
   const network  = new Network(scene);
@@ -54,8 +59,22 @@ function startGame(cls) {
   let playerHealth = cls.health;
   let mouseDown    = false;
 
-  // ── Connect P2P immediately (before pointer lock) ─────────────
-  // so the invite link is visible on the "Click to Play" screen
+  // ── ADS (right-click) ─────────────────────────────────────
+  renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+  renderer.domElement.addEventListener('mousedown', e => {
+    if (e.button === 2 && controls.locked) {
+      crosshair.setADS(true);
+      controls.isADS = true;
+    }
+  });
+  renderer.domElement.addEventListener('mouseup', e => {
+    if (e.button === 2) {
+      crosshair.setADS(false);
+      controls.isADS = false;
+    }
+  });
+
+  // ── P2P connection ────────────────────────────────────────
   network.start(cls, camera).then(url => {
     document.getElementById('overlay-invite-url').textContent = url;
     document.getElementById('invite-panel').style.display = 'flex';
@@ -77,9 +96,8 @@ function startGame(cls) {
     document.getElementById('invite-panel').style.display = 'flex';
   });
 
-  // ── Pointer lock ──────────────────────────────────────────────
+  // ── Pointer lock ──────────────────────────────────────────
   overlayEl.addEventListener('click', e => {
-    // Don't lock if user clicked the copy button
     if (e.target.id === 'overlay-invite-copy') return;
     controls.lock();
   });
@@ -94,14 +112,18 @@ function startGame(cls) {
   });
 
   controls.plc.addEventListener('unlock', () => {
+    // Cancel ADS on unlock
+    crosshair.setADS(false);
+    controls.isADS = false;
+
     overlayEl.innerHTML = `
       <h2>PAUSED</h2>
       <p>Click to resume</p>
-      <p class="sub">WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; Click shoot &nbsp;|&nbsp; <b>SPACE</b> jump &nbsp;|&nbsp; <b>SHIFT</b> sprint</p>`;
+      <p class="sub">WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; LMB shoot &nbsp;|&nbsp; <b>RMB</b> scope &nbsp;|&nbsp; <b>SPACE</b> jump &nbsp;|&nbsp; <b>SHIFT</b> sprint</p>`;
     overlayEl.style.display = 'flex';
   });
 
-  // ── Network callbacks ─────────────────────────────────────────
+  // ── Network callbacks ─────────────────────────────────────
   network.onHit = (dmg) => {
     playerHealth = Math.max(0, playerHealth - dmg);
   };
@@ -115,7 +137,7 @@ function startGame(cls) {
     setTimeout(() => { playerHealth = cls.health; }, 5000);
   };
 
-  // ── Shooting ──────────────────────────────────────────────────
+  // ── Shooting ──────────────────────────────────────────────
   shooter.onShot = ({ hit, remoteHitId }) => {
     ui.showFlash();
     if (hit) ui.showHit();
@@ -136,16 +158,26 @@ function startGame(cls) {
     if (e.button === 0) mouseDown = false;
   });
 
-  // ── Game loop ─────────────────────────────────────────────────
+  // ── Game loop ─────────────────────────────────────────────
   const clock = new THREE.Clock();
   function loop() {
     const delta = Math.min(clock.getDelta(), 0.05);
+
     if (controls.locked) {
       controls.update(delta);
+
+      // Crosshair spread: ratio of current speed vs max speed
+      const maxSpd = cls.speed * 1.65;
+      crosshair.setSpread(Math.min(1, controls.moveSpeed / maxSpd));
+
       if (mouseDown) doShoot();
       shooter.update();
       ui.update(playerHealth, cls.health, shooter.ammo, shooter.maxAmmo);
     }
+
+    // Always update crosshair FOV lerp (even when not locked, so zoom is smooth)
+    crosshair.update(delta);
+
     renderer.render(scene, camera);
     requestAnimationFrame(loop);
   }

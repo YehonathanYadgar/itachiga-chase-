@@ -43,7 +43,29 @@
   <!-- HUD -->
   <div id="hud" style="display:none">
 
-    <div id="crosshair"></div>
+    <!-- Per-weapon crosshair: class swapped by crosshair.js -->
+    <div id="crosshair" class="ch-default">
+      <div class="ch-top"></div>
+      <div class="ch-bottom"></div>
+      <div class="ch-left"></div>
+      <div class="ch-right"></div>
+      <div class="ch-dot"></div>
+      <div class="ch-circle"></div>
+    </div>
+
+    <!-- Sniper scope overlay (shown on RMB) -->
+    <div id="scope-overlay">
+      <div class="scope-mask"></div>
+      <div class="scope-ring"></div>
+      <div class="scope-h"></div>
+      <div class="scope-v"></div>
+      <div class="scope-tick scope-tick-l"></div>
+      <div class="scope-tick scope-tick-r"></div>
+      <div class="scope-tick scope-tick-u"></div>
+      <div class="scope-tick scope-tick-d"></div>
+      <div class="scope-dot"></div>
+    </div>
+
     <div id="hitmarker">✕</div>
     <div id="muzzle-flash"></div>
     <div id="damage-flash"></div>

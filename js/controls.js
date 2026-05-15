@@ -1,83 +1,131 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 
-const BOUND = 48;
-const EYE_HEIGHT = 1.7;
-const GRAVITY = 20;
-const JUMP_FORCE = 8;
-const SPRINT_MULTIPLIER = 1.8;
+const BOUND       = 48;
+const EYE_HEIGHT  = 1.7;
+const GRAVITY     = 26;
+const JUMP_FORCE  = 9.5;
+const ACCEL       = 22;    // snappy acceleration (higher = more responsive)
+const FRICTION    = 18;    // fast stop
+const SPRINT_MULT = 1.65;
+const ADS_MULT    = 0.45;
 
 export class Controls {
   constructor(camera, domElement) {
-    this.camera = camera;
-    this.plc = new PointerLockControls(camera, domElement);
-    this.keys = {};
-    this.speed = 8;
-    this.locked = false;
-    this.vy = 0;          // vertical velocity
+    this.camera    = camera;
+    this.plc       = new PointerLockControls(camera, domElement);
+    this.keys      = {};
+    this.speed     = 8;   // base speed, overridden per class
+    this.locked    = false;
+    this.isADS     = false;
+
+    // Physics
+    this._velX    = 0;
+    this._velZ    = 0;
+    this._vy      = 0;
+    this._baseY   = EYE_HEIGHT;
     this.onGround = true;
 
-    this.plc.addEventListener('lock',   () => { this.locked = true; });
+    // Visual feel
+    this._bob        = 0;
+    this._bobAmp     = 0;
+    this._landSquish = 0;
+
+    this.plc.addEventListener('lock',   () => { this.locked = true;  });
     this.plc.addEventListener('unlock', () => { this.locked = false; });
 
     document.addEventListener('keydown', e => {
       this.keys[e.code] = true;
-      // Jump on Space
       if (e.code === 'Space' && this.onGround && this.locked) {
-        this.vy = JUMP_FORCE;
+        this._vy      = JUMP_FORCE;
         this.onGround = false;
+        this._bobAmp  = 0;
         e.preventDefault();
       }
     });
     document.addEventListener('keyup', e => { this.keys[e.code] = false; });
   }
 
-  lock() { this.plc.lock(); }
+  lock()   { this.plc.lock();   }
   unlock() { this.plc.unlock(); }
 
   get isSprinting() {
-    return this.keys['ShiftLeft'] || this.keys['ShiftRight'];
+    return (this.keys['ShiftLeft'] || this.keys['ShiftRight'])
+        && !this.isADS
+        && this.onGround;
+  }
+
+  /** Horizontal speed magnitude — used by crosshair spread */
+  get moveSpeed() {
+    return Math.sqrt(this._velX * this._velX + this._velZ * this._velZ);
+  }
+
+  /** Instant camera pitch kick (recoil) */
+  addRecoil(amount) {
+    this.camera.rotation.x -= amount;
   }
 
   update(delta) {
     if (!this.locked) return;
 
+    // ── Wish direction ─────────────────────────────
     const fwd = new THREE.Vector3();
     this.camera.getWorldDirection(fwd);
-    fwd.y = 0;
-    fwd.normalize();
+    fwd.y = 0; fwd.normalize();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
 
-    const right = new THREE.Vector3();
-    right.crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+    let wX = 0, wZ = 0;
+    if (this.keys['KeyW'] || this.keys['ArrowUp'])    { wX += fwd.x;   wZ += fwd.z;   }
+    if (this.keys['KeyS'] || this.keys['ArrowDown'])  { wX -= fwd.x;   wZ -= fwd.z;   }
+    if (this.keys['KeyD'] || this.keys['ArrowRight']) { wX += right.x; wZ += right.z; }
+    if (this.keys['KeyA'] || this.keys['ArrowLeft'])  { wX -= right.x; wZ -= right.z; }
 
-    const move = new THREE.Vector3();
-    if (this.keys['KeyW'] || this.keys['ArrowUp'])    move.add(fwd);
-    if (this.keys['KeyS'] || this.keys['ArrowDown'])  move.sub(fwd);
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) move.add(right);
-    if (this.keys['KeyA'] || this.keys['ArrowLeft'])  move.sub(right);
+    const wLen = Math.sqrt(wX * wX + wZ * wZ);
+    const targetSpeed = this.isSprinting ? this.speed * SPRINT_MULT
+                      : this.isADS       ? this.speed * ADS_MULT
+                      : this.speed;
 
-    const currentSpeed = this.isSprinting
-      ? this.speed * SPRINT_MULTIPLIER
-      : this.speed;
-
-    if (move.length() > 0) {
-      move.normalize().multiplyScalar(currentSpeed * delta);
-      this.camera.position.add(move);
+    if (wLen > 0) {
+      const n = targetSpeed / wLen;
+      wX *= n; wZ *= n;
+      const t = Math.min(1, ACCEL * delta);
+      this._velX += (wX - this._velX) * t;
+      this._velZ += (wZ - this._velZ) * t;
+    } else {
+      const t = Math.min(1, FRICTION * delta);
+      this._velX *= (1 - t);
+      this._velZ *= (1 - t);
     }
 
-    // Apply gravity & jump
-    this.vy -= GRAVITY * delta;
-    this.camera.position.y += this.vy * delta;
+    this.camera.position.x = Math.max(-BOUND, Math.min(BOUND,
+      this.camera.position.x + this._velX * delta));
+    this.camera.position.z = Math.max(-BOUND, Math.min(BOUND,
+      this.camera.position.z + this._velZ * delta));
 
-    // Land on ground
-    if (this.camera.position.y <= EYE_HEIGHT) {
-      this.camera.position.y = EYE_HEIGHT;
-      this.vy = 0;
+    // ── Gravity & jump ─────────────────────────────
+    this._vy   -= GRAVITY * delta;
+    this._baseY += this._vy * delta;
+
+    if (this._baseY <= EYE_HEIGHT) {
+      if (this._vy < -5) this._landSquish = Math.min(0.07, -this._vy * 0.005);
+      this._baseY   = EYE_HEIGHT;
+      this._vy      = 0;
       this.onGround = true;
     }
 
-    // Clamp inside arena
-    this.camera.position.x = Math.max(-BOUND, Math.min(BOUND, this.camera.position.x));
-    this.camera.position.z = Math.max(-BOUND, Math.min(BOUND, this.camera.position.z));
+    // ── Head bob ───────────────────────────────────
+    const spd = this.moveSpeed;
+    if (this.onGround && spd > 0.4) {
+      this._bob    += delta * (this.isSprinting ? 14 : 10);
+      this._bobAmp  = Math.min(0.028, this._bobAmp + delta * 5);
+    } else {
+      this._bobAmp  = Math.max(0, this._bobAmp - delta * 10);
+    }
+
+    // Landing squish fade
+    this._landSquish = Math.max(0, this._landSquish - delta * 0.7);
+
+    this.camera.position.y =
+      this._baseY + Math.sin(this._bob) * this._bobAmp - this._landSquish;
   }
 }

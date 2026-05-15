@@ -2,24 +2,26 @@ import * as THREE from 'three';
 
 export class Shooter {
   constructor(scene, camera) {
-    this.scene = scene;
-    this.camera = camera;
+    this.scene     = scene;
+    this.camera    = camera;
     this.raycaster = new THREE.Raycaster();
-    this.raycaster.far = 200;
+    this.raycaster.far = 300;
 
+    // Weapon stats (set by configure)
     this.damage   = 20;
     this.fireRate = 300;
-    this.spread   = 0.05;
+    this.spread   = 0.04;
     this.pellets  = 1;
     this.ammo     = Infinity;
     this.maxAmmo  = Infinity;
+    this.recoil   = 0.02;
     this._lastShot = 0;
 
-    // Bullet trails pool
-    this._trails = [];
+    // Short-lived impact flashes (no trails — instant feedback)
+    this._flashes = [];
 
-    // Muzzle flash (DOM, handled by UI)
-    this.onShot = null; // callback(hit: boolean)
+    this.onShot   = null;
+    this.controls = null;  // injected from main.js after construction
   }
 
   configure(cls) {
@@ -29,15 +31,26 @@ export class Shooter {
     this.pellets  = cls.pellets ?? 1;
     this.ammo     = cls.ammo;
     this.maxAmmo  = cls.ammo;
+    this.recoil   = cls.recoil ?? 0.018;
   }
 
-  // remoteMeshMap: Map<mesh → RemotePlayer> from network.getMeshMap()
+  canShoot(now) {
+    return now - this._lastShot >= this.fireRate;
+  }
+
   tryShoot(enemies, now, remoteMeshMap = new Map()) {
-    if (now - this._lastShot < this.fireRate) return false;
+    if (!this.canShoot(now)) return false;
     if (this.ammo !== Infinity && this.ammo <= 0) return false;
 
     this._lastShot = now;
     if (this.ammo !== Infinity) this.ammo--;
+
+    // Instant recoil kick
+    if (this.controls) this.controls.addRecoil(this.recoil);
+
+    // Spread increases while moving
+    const moving = this.controls && this.controls.moveSpeed > 0.4;
+    const spread = moving ? this.spread * 1.75 : this.spread;
 
     let anyHit      = false;
     let remoteHitId = null;
@@ -48,8 +61,8 @@ export class Shooter {
 
     for (let p = 0; p < this.pellets; p++) {
       const dir = new THREE.Vector3(
-        (Math.random() - 0.5) * this.spread * 2,
-        (Math.random() - 0.5) * this.spread * 2,
+        (Math.random() - 0.5) * spread * 2,
+        (Math.random() - 0.5) * spread * 2,
         -1
       ).applyQuaternion(this.camera.quaternion).normalize();
 
@@ -57,26 +70,14 @@ export class Shooter {
       const hits = this.raycaster.intersectObjects(allMeshes, false);
 
       if (hits.length > 0) {
-        const mesh = hits[0].object;
-
-        // Local enemy?
+        const mesh       = hits[0].object;
         const localEnemy = enemies.find(e => e.meshes.includes(mesh));
-        if (localEnemy) {
-          localEnemy.hit(this.damage);
-          anyHit = true;
-        }
-
-        // Remote player?
+        if (localEnemy) { localEnemy.hit(this.damage); anyHit = true; }
         if (!localEnemy && remoteMeshMap.has(mesh)) {
-          const rp = remoteMeshMap.get(mesh);
-          remoteHitId = rp.id;
+          remoteHitId = remoteMeshMap.get(mesh).id;
           anyHit = true;
         }
-
-        this._spawnTrail(this.camera.position.clone(), hits[0].point);
-      } else {
-        const far = this.camera.position.clone().addScaledVector(dir, 60);
-        this._spawnTrail(this.camera.position.clone(), far);
+        this._spawnFlash(hits[0].point, anyHit);
       }
     }
 
@@ -85,24 +86,27 @@ export class Shooter {
     return result;
   }
 
-  _spawnTrail(from, to) {
-    const points = [from, to];
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const mat = new THREE.LineBasicMaterial({ color: 0xffff88, transparent: true, opacity: 0.7 });
-    const line = new THREE.Line(geo, mat);
-    this.scene.add(line);
-    this._trails.push({ line, ttl: 6 });
+  _spawnFlash(point, isHit) {
+    const size  = isHit ? 0.16 : 0.07;
+    const color = isHit ? 0xff4400 : 0xffee88;
+    const geo   = new THREE.SphereGeometry(size, 5, 5);
+    const mat   = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+    const mesh  = new THREE.Mesh(geo, mat);
+    mesh.position.copy(point);
+    this.scene.add(mesh);
+    this._flashes.push({ mesh, ttl: 3, maxTtl: 3 });
   }
 
   update() {
-    for (let i = this._trails.length - 1; i >= 0; i--) {
-      const t = this._trails[i];
-      t.ttl--;
-      t.line.material.opacity = t.ttl / 6 * 0.7;
-      if (t.ttl <= 0) {
-        this.scene.remove(t.line);
-        t.line.geometry.dispose();
-        this._trails.splice(i, 1);
+    for (let i = this._flashes.length - 1; i >= 0; i--) {
+      const f = this._flashes[i];
+      f.ttl--;
+      f.mesh.material.opacity = f.ttl / f.maxTtl;
+      if (f.ttl <= 0) {
+        this.scene.remove(f.mesh);
+        f.mesh.geometry.dispose();
+        f.mesh.material.dispose();
+        this._flashes.splice(i, 1);
       }
     }
   }
