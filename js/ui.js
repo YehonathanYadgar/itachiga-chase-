@@ -60,11 +60,17 @@ export class UI {
     setTimeout(() => el.remove(), 4000);
   }
 
-  update(health, maxHealth, ammo, maxAmmo) {
+  update(health, maxHealth, ammo, maxAmmo, ammoOverride = null) {
     const ratio = health / maxHealth;
     this.hp.textContent = Math.max(0, Math.round(health));
     this.hp.style.color = ratio > 0.5 ? '#44ff44' : ratio > 0.25 ? '#ffcc00' : '#ff3333';
-    this.ammoEl.textContent = maxAmmo === Infinity ? '∞' : `${ammo} / ${maxAmmo}`;
+    if (ammoOverride) {
+      this.ammoEl.textContent = ammoOverride;
+      this.ammoEl.style.color = '#ffaa00';
+    } else {
+      this.ammoEl.textContent = maxAmmo === Infinity ? '∞' : `${ammo} / ${maxAmmo}`;
+      this.ammoEl.style.color = '';
+    }
     this._hitTimer--;
     this.hitEl.style.opacity = this._hitTimer > 0 ? '1' : '0';
     this._flashTimer--;
