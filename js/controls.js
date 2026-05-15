@@ -54,11 +54,6 @@ export class Controls {
     return Math.sqrt(this._velX * this._velX + this._velZ * this._velZ);
   }
 
-  /** Instant camera pitch kick (recoil) */
-  addRecoil(amount) {
-    this.camera.rotation.x -= amount;
-  }
-
   update(delta) {
     if (!this.locked) return;
 
