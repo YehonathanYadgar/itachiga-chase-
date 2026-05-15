@@ -57,7 +57,7 @@ export class Controls {
 
   /** Kick sight UPWARD on each shot — positive = look up in YXZ euler */
   addRecoil(amount) {
-    this.camera.rotation.x += amount;
+    this.camera.rotation.x -= amount;
   }
 
   update(delta) {
