@@ -47,7 +47,7 @@ export const CLASSES = [
     damage:       12,
     fireRate:     75,           // very fast SMG
     recoil:       0.008,
-    weapon:       'SMG',
+    weapon:       'AK-47',
     pellets:      1,
     spread:       0.07,
     ammo:         Infinity,

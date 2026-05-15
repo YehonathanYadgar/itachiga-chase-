@@ -7,6 +7,7 @@ import { Crosshair }    from './crosshair.js';
 import { spawnEnemies } from './enemies.js';
 import { UI }           from './ui.js';
 import { Network }      from './network.js';
+import { Viewmodel }    from './viewmodel.js';
 
 // ── Menu music ────────────────────────────────────────────────
 const menuMusic  = document.getElementById('menu-music');
@@ -87,8 +88,11 @@ function startGame(cls) {
   shooter.configure(cls);
   shooter.controls = controls;   // ← lets shooter read moveSpeed for spread
 
-  const crosshair = new Crosshair(camera);
+  const crosshair  = new Crosshair(camera);
   crosshair.setWeapon(cls);
+
+  const viewmodel = new Viewmodel(camera);
+  if (cls.id === 'rusher') viewmodel.show();
 
   const enemies  = spawnEnemies(scene);
   const network  = new Network(scene);
@@ -103,12 +107,14 @@ function startGame(cls) {
   renderer.domElement.addEventListener('mousedown', e => {
     if (e.button === 2 && controls.locked) {
       crosshair.setADS(true);
+      viewmodel.setADS(true);
       controls.isADS = true;
     }
   });
   renderer.domElement.addEventListener('mouseup', e => {
     if (e.button === 2) {
       crosshair.setADS(false);
+      viewmodel.setADS(false);
       controls.isADS = false;
     }
   });
@@ -156,6 +162,7 @@ function startGame(cls) {
     stopGameMusic();
     // Cancel ADS on unlock
     crosshair.setADS(false);
+    viewmodel.setADS(false);
     controls.isADS = false;
 
     overlayEl.innerHTML = `
@@ -182,6 +189,7 @@ function startGame(cls) {
   // ── Shooting ──────────────────────────────────────────────
   shooter.onShot = ({ hit, remoteHitId }) => {
     ui.showFlash();
+    viewmodel.shoot();
     if (hit) ui.showHit();
     if (remoteHitId) network.sendHit(remoteHitId, cls.damage);
   };
@@ -214,6 +222,7 @@ function startGame(cls) {
 
       if (mouseDown) doShoot();
       shooter.update();
+      viewmodel.update(delta, controls.moveSpeed);
       ui.update(playerHealth, cls.health, shooter.ammo, shooter.maxAmmo);
     }
 
