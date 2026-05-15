@@ -14,12 +14,13 @@ export class Shooter {
     this.ammo       = Infinity;
     this.maxAmmo    = Infinity;
     this.recoil     = 0.02;
-    this.reloadTime = 0;      // ms, 0 = no reload
+    this.reloadTime = 0;
     this._lastShot  = 0;
     this._reloading = false;
-    this._reloadTimer = 0;    // seconds remaining
+    this._reloadTimer = 0;
 
-    this._flashes = [];
+    this._impacts = []; // impact spark spheres
+    this._bullets = []; // animated flying projectiles
 
     this.onShot           = null;
     this.onReloadStart    = null;
@@ -53,14 +54,10 @@ export class Shooter {
 
   tryShoot(enemies, now, remoteMeshMap = new Map()) {
     if (!this.canShoot(now)) return false;
-    if (this.ammo !== Infinity && this.ammo <= 0) {
-      this.startReload();
-      return false;
-    }
+    if (this.ammo !== Infinity && this.ammo <= 0) { this.startReload(); return false; }
 
     this._lastShot = now;
     if (this.ammo !== Infinity) this.ammo--;
-
     if (this.controls) this.controls.addRecoil(this.recoil);
 
     const moving = this.controls && this.controls.moveSpeed > 0.4;
@@ -81,10 +78,10 @@ export class Shooter {
       ).applyQuaternion(this.camera.quaternion).normalize();
 
       this.raycaster.set(this.camera.position, dir);
-      const hits = this.raycaster.intersectObjects(allMeshes, false);
-
+      const hits     = this.raycaster.intersectObjects(allMeshes, false);
       const hitPoint = hits.length > 0 ? hits[0].point : null;
-      this._spawnTracer(this.camera.position, dir, hitPoint);
+
+      this._spawnBullet(this.camera.position, dir, hitPoint);
 
       if (hitPoint) {
         const mesh       = hits[0].object;
@@ -94,11 +91,10 @@ export class Shooter {
           remoteHitId = remoteMeshMap.get(mesh).id;
           anyHit = true;
         }
-        this._spawnFlash(hitPoint, anyHit);
+        this._spawnImpact(hitPoint, anyHit);
       }
     }
 
-    // Auto-reload on last bullet
     if (this.ammo === 0 && this.reloadTime > 0) this.startReload();
 
     const result = { hit: anyHit, remoteHitId };
@@ -106,7 +102,51 @@ export class Shooter {
     return result;
   }
 
-  _spawnFlash(point, isHit) {
+  // ── Animated flying bullet ────────────────────────────────────
+  _spawnBullet(origin, dir, hitPoint) {
+    // Bullet core — elongated sphere oriented along travel direction
+    const coreGeo = new THREE.SphereGeometry(0.055, 6, 4);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffdd33,
+      transparent: true,
+      opacity: 1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+    core.quaternion.copy(quat);
+    core.scale.set(0.7, 0.7, 4.5); // elongated along direction
+
+    const start = origin.clone().addScaledVector(dir, 0.7);
+    core.position.copy(start);
+    this.scene.add(core);
+
+    // Trail line — two-point line that follows bullet, length = 2 units
+    const trailPts = [start.clone(), start.clone()];
+    const trailGeo = new THREE.BufferGeometry().setFromPoints(trailPts);
+    const trailMat = new THREE.LineBasicMaterial({
+      color: 0xff9900,
+      transparent: true,
+      opacity: 0.55,
+    });
+    const trail = new THREE.Line(trailGeo, trailMat);
+    this.scene.add(trail);
+
+    const maxDist = hitPoint ? Math.max(1, origin.distanceTo(hitPoint)) : 120;
+
+    this._bullets.push({
+      core, trail,
+      pos: start.clone(),
+      dir: dir.clone(),
+      speed: 68,
+      distTraveled: 0,
+      maxDist,
+    });
+  }
+
+  // ── Impact spark ──────────────────────────────────────────────
+  _spawnImpact(point, isHit) {
     const size  = isHit ? 0.22 : 0.1;
     const color = isHit ? 0xff4400 : 0xffee88;
     const geo   = new THREE.SphereGeometry(size, 5, 5);
@@ -114,24 +154,11 @@ export class Shooter {
     const mesh  = new THREE.Mesh(geo, mat);
     mesh.position.copy(point);
     this.scene.add(mesh);
-    this._flashes.push({ mesh, ttl: 6, maxTtl: 6 });
-  }
-
-  _spawnTracer(origin, direction, hitPoint) {
-    const end = hitPoint
-      ? hitPoint.clone()
-      : origin.clone().addScaledVector(direction, 150);
-    // Start slightly in front of camera so it doesn't clip the near plane
-    const start = origin.clone().addScaledVector(direction, 0.4);
-    const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
-    const mat = new THREE.LineBasicMaterial({ color: 0xffee44, transparent: true, opacity: 0.9 });
-    const line = new THREE.Line(geo, mat);
-    this.scene.add(line);
-    this._flashes.push({ mesh: line, ttl: 10, maxTtl: 10 });
+    this._impacts.push({ mesh, ttl: 6, maxTtl: 6 });
   }
 
   update(delta) {
-    // Reload countdown
+    // ── Reload timer ──────────────────────────────────────────
     if (this._reloading && delta) {
       this._reloadTimer -= delta;
       if (this._reloadTimer <= 0) {
@@ -141,16 +168,50 @@ export class Shooter {
       }
     }
 
-    // Flash fade
-    for (let i = this._flashes.length - 1; i >= 0; i--) {
-      const f = this._flashes[i];
+    // ── Move bullets ──────────────────────────────────────────
+    if (delta) {
+      for (let i = this._bullets.length - 1; i >= 0; i--) {
+        const b = this._bullets[i];
+        const step = b.speed * delta;
+        b.distTraveled += step;
+        b.pos.addScaledVector(b.dir, step);
+        b.core.position.copy(b.pos);
+
+        // Trail: start 2 units behind bullet, end at bullet
+        const trailStart = b.pos.clone().addScaledVector(b.dir, -2.0);
+        const attr = b.trail.geometry.attributes.position;
+        attr.setXYZ(0, trailStart.x, trailStart.y, trailStart.z);
+        attr.setXYZ(1, b.pos.x, b.pos.y, b.pos.z);
+        attr.needsUpdate = true;
+
+        // Fade out in last 3 units
+        const remaining = b.maxDist - b.distTraveled;
+        if (remaining < 3) {
+          const f = Math.max(0, remaining / 3);
+          b.core.material.opacity  = f;
+          b.trail.material.opacity = f * 0.55;
+        }
+
+        if (b.distTraveled >= b.maxDist) {
+          this.scene.remove(b.core);
+          this.scene.remove(b.trail);
+          b.core.geometry.dispose();  b.core.material.dispose();
+          b.trail.geometry.dispose(); b.trail.material.dispose();
+          this._bullets.splice(i, 1);
+        }
+      }
+    }
+
+    // ── Fade impact sparks ────────────────────────────────────
+    for (let i = this._impacts.length - 1; i >= 0; i--) {
+      const f = this._impacts[i];
       f.ttl--;
       f.mesh.material.opacity = f.ttl / f.maxTtl;
       if (f.ttl <= 0) {
         this.scene.remove(f.mesh);
         f.mesh.geometry.dispose();
         f.mesh.material.dispose();
-        this._flashes.splice(i, 1);
+        this._impacts.splice(i, 1);
       }
     }
   }
