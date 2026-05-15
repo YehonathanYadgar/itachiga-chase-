@@ -28,7 +28,7 @@ export const CLASSES = [
     speed:        6,
     damage:       95,
     fireRate:     1100,
-    recoil:       0.08,
+    recoil:       0.045,
     weapon:       'RIFLE',
     pellets:      1,
     spread:       0.002,        // near-perfect accuracy
