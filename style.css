@@ -56,6 +56,20 @@ canvas { display: block; }
 }
 .c-desc   { font-size: 0.72rem; color: #777; font-style: italic; }
 
+#music-btn {
+  margin-top: 6px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #444;
+  border-radius: 20px;
+  color: #aaa;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  padding: 7px 20px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+#music-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
 /* ── OVERLAY ── */
 #overlay {
   position: fixed; inset: 0; z-index: 50;

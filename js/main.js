@@ -9,13 +9,23 @@ import { UI }           from './ui.js';
 import { Network }      from './network.js';
 
 // ── Menu music ────────────────────────────────────────────────
-const menuMusic = document.getElementById('menu-music');
+const menuMusic  = document.getElementById('menu-music');
+const musicBtn   = document.getElementById('music-btn');
 menuMusic.volume = 0.4;
-const playMusic = () => menuMusic.play().catch(() => {});
-// Try autoplay; browsers may block until first interaction
-playMusic();
-document.addEventListener('pointerdown', playMusic, { once: true });
-document.addEventListener('keydown',     playMusic, { once: true });
+let musicOn = false;
+
+musicBtn.addEventListener('click', () => {
+  if (musicOn) {
+    menuMusic.pause();
+    musicOn = false;
+    musicBtn.textContent = '🔇 Music off';
+  } else {
+    menuMusic.play().then(() => {
+      musicOn = true;
+      musicBtn.textContent = '🔊 Music on';
+    }).catch(() => {});
+  }
+});
 
 // ── Class select ──────────────────────────────────────────────
 const selectEl  = document.getElementById('class-select');
@@ -46,8 +56,7 @@ for (const cls of CLASSES) {
 
 // ── Game ──────────────────────────────────────────────────────
 function startGame(cls) {
-  menuMusic.pause();
-  menuMusic.currentTime = 0;
+  if (musicOn) { menuMusic.pause(); menuMusic.currentTime = 0; }
   selectEl.style.display = 'none';
   overlayEl.style.display = 'flex';
 
