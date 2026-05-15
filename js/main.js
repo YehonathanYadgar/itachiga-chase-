@@ -14,6 +14,26 @@ const musicBtn   = document.getElementById('music-btn');
 menuMusic.volume = 0.4;
 let musicOn = false;
 
+// ── In-game music (plays with random breaks) ──────────────────
+const gameMusic = document.getElementById('game-music');
+gameMusic.volume = 0.22;
+let gameMusicTimer = null;
+
+function startGameMusic() {
+  gameMusic.currentTime = 0;
+  gameMusic.play().catch(() => {});
+}
+function stopGameMusic() {
+  clearTimeout(gameMusicTimer);
+  gameMusic.pause();
+  gameMusic.currentTime = 0;
+}
+gameMusic.addEventListener('ended', () => {
+  // Wait 15–45 s then play again
+  const breakMs = (15 + Math.random() * 30) * 1000;
+  gameMusicTimer = setTimeout(startGameMusic, breakMs);
+});
+
 musicBtn.addEventListener('click', () => {
   if (musicOn) {
     menuMusic.pause();
@@ -123,6 +143,7 @@ function startGame(cls) {
 
   controls.plc.addEventListener('lock', () => {
     if (musicOn) { menuMusic.pause(); menuMusic.currentTime = 0; musicOn = false; }
+    startGameMusic();
     overlayEl.style.display = 'none';
     hudEl.style.display = 'block';
     ui.setStatus(network.isHost ? '🟢 Hosting' : '🟢 Connected');
@@ -132,6 +153,7 @@ function startGame(cls) {
   });
 
   controls.plc.addEventListener('unlock', () => {
+    stopGameMusic();
     // Cancel ADS on unlock
     crosshair.setADS(false);
     controls.isADS = false;
