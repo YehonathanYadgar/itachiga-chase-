@@ -8,6 +8,15 @@ import { spawnEnemies } from './enemies.js';
 import { UI }           from './ui.js';
 import { Network }      from './network.js';
 
+// ── Menu music ────────────────────────────────────────────────
+const menuMusic = document.getElementById('menu-music');
+menuMusic.volume = 0.4;
+const playMusic = () => menuMusic.play().catch(() => {});
+// Try autoplay; browsers may block until first interaction
+playMusic();
+document.addEventListener('pointerdown', playMusic, { once: true });
+document.addEventListener('keydown',     playMusic, { once: true });
+
 // ── Class select ──────────────────────────────────────────────
 const selectEl  = document.getElementById('class-select');
 const overlayEl = document.getElementById('overlay');
@@ -37,6 +46,8 @@ for (const cls of CLASSES) {
 
 // ── Game ──────────────────────────────────────────────────────
 function startGame(cls) {
+  menuMusic.pause();
+  menuMusic.currentTime = 0;
   selectEl.style.display = 'none';
   overlayEl.style.display = 'flex';
 
