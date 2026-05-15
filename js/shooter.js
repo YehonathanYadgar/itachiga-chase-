@@ -71,11 +71,12 @@ export class Shooter {
     const allMeshes    = [...localMeshes, ...remoteMeshes];
 
     for (let p = 0; p < this.pellets; p++) {
-      const dir = new THREE.Vector3(
-        (Math.random() - 0.5) * spread * 2,
-        (Math.random() - 0.5) * spread * 2,
-        -1
-      ).applyQuaternion(this.camera.quaternion).normalize();
+      // First pellet always travels exactly where the crosshair points.
+      // Extra pellets (shotgun p>0) scatter around it.
+      const offsetX = p === 0 ? 0 : (Math.random() - 0.5) * spread * 2;
+      const offsetY = p === 0 ? 0 : (Math.random() - 0.5) * spread * 2;
+      const dir = new THREE.Vector3(offsetX, offsetY, -1)
+        .applyQuaternion(this.camera.quaternion).normalize();
 
       this.raycaster.set(this.camera.position, dir);
       const hits     = this.raycaster.intersectObjects(allMeshes, false);
