@@ -10,7 +10,7 @@ export const CLASSES = [
     speed:        5,
     damage:       28,
     fireRate:     110,          // fast burst (minigun feel)
-    recoil:       0.012,
+    recoil:       0.04,
     weapon:       'MINIGUN',
     pellets:      1,
     spread:       0.055,
@@ -28,7 +28,7 @@ export const CLASSES = [
     speed:        6,
     damage:       95,
     fireRate:     1100,
-    recoil:       0.05,
+    recoil:       0.08,
     weapon:       'RIFLE',
     pellets:      1,
     spread:       0.002,        // near-perfect accuracy
@@ -46,7 +46,7 @@ export const CLASSES = [
     speed:        13,
     damage:       12,
     fireRate:     75,           // very fast SMG
-    recoil:       0.008,
+    recoil:       0.028,
     weapon:       'AK-47',
     pellets:      1,
     spread:       0.07,
@@ -64,7 +64,7 @@ export const CLASSES = [
     speed:        7,
     damage:       18,
     fireRate:     700,
-    recoil:       0.045,
+    recoil:       0.065,
     weapon:       'SHOTGUN',
     pellets:      8,
     spread:       0.16,

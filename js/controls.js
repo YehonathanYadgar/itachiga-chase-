@@ -55,9 +55,11 @@ export class Controls {
     return Math.sqrt(this._velX * this._velX + this._velZ * this._velZ);
   }
 
-  /** Kick sight UPWARD on each shot — positive = look up in YXZ euler */
+  /** Kick sight UPWARD on each shot.
+   *  In Three.js YXZ euler: positive rotation.x = looking UP.
+   *  So += amount pushes sight upward. */
   addRecoil(amount) {
-    this.camera.rotation.x -= amount;
+    this.camera.rotation.x += amount;
   }
 
   update(delta) {
