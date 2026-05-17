@@ -26,7 +26,15 @@
   <!-- CLASS SELECT -->
   <div id="class-select">
     <h1>🎯 FRIEND SHOOTER</h1>
-    <p class="sub">Choose your fighter</p>
+    <p class="sub">First pick your team, then your fighter</p>
+
+    <!-- Team selection -->
+    <div id="team-select">
+      <button class="team-btn" id="team-blue-btn">🔵 TEAM BLUE</button>
+      <button class="team-btn" id="team-red-btn">🔴 TEAM RED</button>
+    </div>
+    <p id="team-hint" class="sub">↑ Pick a team to unlock your fighter</p>
+
     <div id="class-grid"></div>
     <button id="music-btn">🔇 Music off</button>
   </div>
@@ -84,6 +92,13 @@
       <button id="invite-copy">Copy</button>
     </div>
 
+    <!-- Team score (top center) -->
+    <div id="team-score" style="display:none">
+      <span id="score-blue">🔵 0</span>
+      <span id="score-sep"> — </span>
+      <span id="score-red">0 🔴</span>
+    </div>
+
     <!-- Status + kill feed -->
     <div id="mp-status">Connecting...</div>
     <div id="kill-feed"></div>
@@ -106,6 +121,12 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- Winner banner (shown when a team hits 30) -->
+  <div id="winner-banner" style="display:none">
+    <div id="winner-text"></div>
+    <button id="winner-reload">🔄 Play Again</button>
   </div>
 
   <script type="module" src="js/main.js"></script>

@@ -13,6 +13,30 @@ export class UI {
     this._hitTimer   = 0;
     this._flashTimer = 0;
     this._kills      = 0;
+    this._blueScore  = 0;
+    this._redScore   = 0;
+    this._scoreEl    = document.getElementById('team-score');
+    this._blueEl     = document.getElementById('score-blue');
+    this._redEl      = document.getElementById('score-red');
+  }
+
+  // Call once when game starts — shows the score bar with team colours
+  setTeam(team) {
+    if (this._scoreEl) this._scoreEl.style.display = 'flex';
+    // Highlight your own team name
+    if (this._blueEl) this._blueEl.style.fontWeight = team === 'blue' ? 'bold' : 'normal';
+    if (this._redEl)  this._redEl.style.fontWeight  = team === 'red'  ? 'bold' : 'normal';
+  }
+
+  // Returns winning team string ('blue'|'red') when WIN_SCORE reached, else null
+  addTeamKill(team, winScore = 30) {
+    if (team === 'blue') this._blueScore++;
+    else                 this._redScore++;
+    if (this._blueEl) this._blueEl.textContent = `🔵 ${this._blueScore}`;
+    if (this._redEl)  this._redEl.textContent  = `${this._redScore} 🔴`;
+    if (this._blueScore >= winScore) return 'blue';
+    if (this._redScore  >= winScore) return 'red';
+    return null;
   }
 
   setClass(cls) {

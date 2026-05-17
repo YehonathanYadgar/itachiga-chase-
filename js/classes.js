@@ -1,29 +1,29 @@
 export const CLASSES = [
   {
-    id:           'tank',
-    friendName:   'AMIT',
-    title:        'The Tank',
-    emoji:        '💪',
-    bodyColor:    0xcc2222,
-    crosshairId:  'minigun',   // red 4-line crosshair
+    id:           'emperor',
+    friendName:   'GALACTIC EMPEROR',
+    title:        'The Emperor',
+    emoji:        '👑',
+    bodyColor:    0xaa33ff,
+    crosshairId:  'minigun',
     health:       200,
     speed:        5,
     damage:       28,
-    fireRate:     110,          // fast burst (minigun feel)
+    fireRate:     110,
     recoil:       0.04,
     weapon:       'M4A4',
     pellets:      1,
     spread:       0.055,
     ammo:         Infinity,
-    desc:         'Slow but absolutely built different'
+    desc:         'Rules the battlefield from up close'
   },
   {
-    id:           'sniper',
-    friendName:   'YOSSI',
-    title:        'The Sniper',
-    emoji:        '🎯',
+    id:           'joab',
+    friendName:   'JOAB',
+    title:        'The Warrior',
+    emoji:        '⚔️',
     bodyColor:    0x2244cc,
-    crosshairId:  'sniper',    // thin lines + blue dot + scope on RMB
+    crosshairId:  'sniper',
     health:       80,
     speed:        6,
     damage:       95,
@@ -31,17 +31,17 @@ export const CLASSES = [
     recoil:       0.045,
     weapon:       'RIFLE',
     pellets:      1,
-    spread:       0.002,        // near-perfect accuracy
+    spread:       0.002,
     ammo:         Infinity,
     desc:         'One tap or go home'
   },
   {
-    id:           'rusher',
-    friendName:   'KOBI',
-    title:        'The Rusher',
-    emoji:        '⚡',
+    id:           'snake',
+    friendName:   'SNAKE',
+    title:        'The Shadow',
+    emoji:        '🐍',
     bodyColor:    0x22aa44,
-    crosshairId:  'smg',       // green diamond crosshair
+    crosshairId:  'smg',
     health:       90,
     speed:        13,
     damage:       18,
@@ -52,15 +52,15 @@ export const CLASSES = [
     spread:       0.05,
     ammo:         30,
     reloadTime:   2200,
-    desc:         'Runs faster than he thinks'
+    desc:         'Slithers through the chaos'
   },
   {
-    id:           'shotgunner',
-    friendName:   'MOSHE',
+    id:           'sofa',
+    friendName:   'SOFA',
     title:        'The Wildcard',
-    emoji:        '💥',
+    emoji:        '🛋️',
     bodyColor:    0xff7700,
-    crosshairId:  'shotgun',   // orange circle crosshair
+    crosshairId:  'shotgun',
     health:       130,
     speed:        7,
     damage:       18,
@@ -71,5 +71,41 @@ export const CLASSES = [
     spread:       0.16,
     ammo:         Infinity,
     desc:         'Why aim? Just spray and pray'
-  }
+  },
+  {
+    id:           'advisor',
+    friendName:   'ADVISOR',
+    title:        'The Strategist',
+    emoji:        '🎩',
+    bodyColor:    0x114488,
+    crosshairId:  'sniper',
+    health:       120,
+    speed:        8,
+    damage:       45,
+    fireRate:     550,
+    recoil:       0.03,
+    weapon:       'DMR',
+    pellets:      1,
+    spread:       0.006,
+    ammo:         Infinity,
+    desc:         'Always three steps ahead'
+  },
+  {
+    id:           'razi',
+    friendName:   'CUTE RAZI',
+    title:        'The Wild One',
+    emoji:        '🌸',
+    bodyColor:    0xff44aa,
+    crosshairId:  'smg',
+    health:       100,
+    speed:        11,
+    damage:       14,
+    fireRate:     90,
+    recoil:       0.018,
+    weapon:       'SMG',
+    pellets:      1,
+    spread:       0.04,
+    ammo:         Infinity,
+    desc:         "Don't let the name fool you"
+  },
 ];

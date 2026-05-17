@@ -40,17 +40,21 @@ export class Network {
     // rendered remote players → Map<peerId, RemotePlayer>
     this.remote   = {};
 
+    this.team = null; // 'blue' | 'red'
+
     // Callbacks
     this.onKill      = null; // (name) => void
     this.onDied      = null; // () => void
     this.onPeerCount = null; // (n) => void
     this.onHit       = null; // (dmg) => void  — called when WE take damage
+    this.onTeamKill  = null; // (team) => void — a team scored a point
   }
 
   // Call once, right after pointer lock. Returns the shareable URL.
-  start(cls, camera) {
+  start(cls, camera, team = null) {
     this.cls    = cls;
     this.camera = camera;
+    this.team   = team;
 
     const hash = window.location.hash.slice(1);
     if (hash.length === 6) {
@@ -99,10 +103,10 @@ export class Network {
       // Send world state to new joiner — include host + all current clients
       const worldPlayers = {
         [this.myId]: { name: this.cls.friendName, color: this.cls.bodyColor,
-                       health: this.cls.health, maxHealth: this.cls.health },
+                       health: this.cls.health, maxHealth: this.cls.health, team: this.team },
       };
       for (const [id, rp] of Object.entries(this.remote)) {
-        worldPlayers[id] = { name: rp.name, color: rp._color, health: rp.health, maxHealth: rp.maxHealth };
+        worldPlayers[id] = { name: rp.name, color: rp._color, health: rp.health, maxHealth: rp.maxHealth, team: rp.team };
       }
       conn.send({ t: 'world', players: worldPlayers });
     });
@@ -144,7 +148,7 @@ export class Network {
         conn.on('open', () => {
           // Introduce ourselves to host
           conn.send({ t: 'join', name: this.cls.friendName, color: this.cls.bodyColor,
-                      health: this.cls.health, maxHealth: this.cls.health });
+                      health: this.cls.health, maxHealth: this.cls.health, team: this.team });
           this._startSync();
           resolve(window.location.href);
         });
@@ -181,11 +185,10 @@ export class Network {
       case 'join': {
         if (!this.remote[id]) {
           this._addRemote(id, { name: msg.name, color: msg.color,
-                                health: msg.health, maxHealth: msg.maxHealth });
-          // HOST: tell everyone else about this new joiner
+                                health: msg.health, maxHealth: msg.maxHealth, team: msg.team });
           if (this.isHost) {
             this._relay({ t: 'joined', from: id, name: msg.name, color: msg.color,
-                          health: msg.health, maxHealth: msg.maxHealth }, id);
+                          health: msg.health, maxHealth: msg.maxHealth, team: msg.team }, id);
           }
         }
         break;
@@ -193,8 +196,12 @@ export class Network {
       case 'joined': {
         if (id !== this.myId && !this.remote[id]) {
           this._addRemote(id, { name: msg.name, color: msg.color,
-                                health: msg.health, maxHealth: msg.maxHealth });
+                                health: msg.health, maxHealth: msg.maxHealth, team: msg.team });
         }
+        break;
+      }
+      case 'team_kill': {
+        if (this.onTeamKill) this.onTeamKill(msg.team);
         break;
       }
       case 'move': {
@@ -249,6 +256,12 @@ export class Network {
   // ── Public shoot/hit API ──────────────────────────────────────
   sendShoot() { /* visual only for now — trails handled locally */ }
 
+  sendTeamKill(team) {
+    const msg = { t: 'team_kill', from: this.myId, team };
+    this._send(msg);
+    this._handle(msg); // apply locally too
+  }
+
   sendHit(targetId, dmg) {
     const msg = { t: 'hit', from: this.myId, targetId, dmg };
     this._send(msg);
@@ -290,6 +303,7 @@ class RemotePlayer {
     this.maxHealth = data.maxHealth ?? 100;
     this.health    = data.health    ?? this.maxHealth;
     this._color    = data.color     ?? 0xff4444;
+    this.team      = data.team      ?? null;
 
     this.group = new THREE.Group();
 

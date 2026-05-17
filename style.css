@@ -26,9 +26,48 @@ canvas { display: block; }
 
 .sub { color: #666; font-size: 0.85rem; letter-spacing: 2px; }
 
+/* ── TEAM SELECTION ── */
+#team-select {
+  display: flex; gap: 18px; margin-top: 4px;
+}
+
+.team-btn {
+  padding: 10px 36px;
+  border-radius: 30px;
+  border: 2px solid #444;
+  background: rgba(255,255,255,0.06);
+  color: #aaa;
+  font-family: 'Courier New', monospace;
+  font-size: 1rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.team-btn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+#team-blue-btn.active {
+  background: rgba(30, 100, 255, 0.25);
+  border-color: #4488ff;
+  color: #88bbff;
+  box-shadow: 0 0 18px rgba(60,120,255,0.4);
+}
+#team-red-btn.active {
+  background: rgba(255, 50, 50, 0.25);
+  border-color: #ff4444;
+  color: #ffaaaa;
+  box-shadow: 0 0 18px rgba(255,60,60,0.4);
+}
+
+#team-hint {
+  margin-top: 2px; margin-bottom: 4px;
+  transition: color 0.2s;
+}
+
+/* ── CLASS GRID (3 × 2 for 6 players) ── */
 #class-grid {
   display: grid;
-  grid-template-columns: repeat(4, 190px);
+  grid-template-columns: repeat(3, 200px);
   gap: 14px;
   margin-top: 8px;
 }
@@ -368,3 +407,38 @@ canvas { display: block; }
 
 #class-name { color: var(--class-color); font-size: 1.2rem; }
 #weapon-name { color: #ffcc44; }
+
+/* Team score bar (top center of HUD) */
+#team-score {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid #444; border-radius: 8px;
+  padding: 6px 20px; font-size: 1.1rem; font-weight: bold;
+  letter-spacing: 2px; pointer-events: none;
+}
+#score-blue { color: #66aaff; }
+#score-red  { color: #ff6666; }
+#score-sep  { color: #888; }
+
+/* Winner banner */
+#winner-banner {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 28px;
+  background: rgba(0,0,0,0.88);
+  pointer-events: all;
+}
+#winner-text {
+  font-size: 2.8rem; font-weight: bold; text-align: center;
+  letter-spacing: 4px; line-height: 1.4;
+  text-shadow: 0 0 30px currentColor;
+}
+#winner-reload {
+  background: rgba(255,255,255,0.1); border: 2px solid #555;
+  border-radius: 30px; color: #fff; font-size: 1.1rem;
+  font-family: 'Courier New', monospace; letter-spacing: 2px;
+  padding: 12px 36px; cursor: pointer;
+  transition: background 0.15s;
+}
+#winner-reload:hover { background: rgba(255,255,255,0.2); }

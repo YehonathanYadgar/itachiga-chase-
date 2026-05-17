@@ -49,11 +49,33 @@ musicBtn.addEventListener('click', () => {
   }
 });
 
-// ── Class select ──────────────────────────────────────────────
+// ── Team + class select ───────────────────────────────────────
 const selectEl  = document.getElementById('class-select');
 const overlayEl = document.getElementById('overlay');
 const hudEl     = document.getElementById('hud');
 const grid      = document.getElementById('class-grid');
+
+let selectedTeam = null;
+
+const teamHint    = document.getElementById('team-hint');
+const blueBtnEl   = document.getElementById('team-blue-btn');
+const redBtnEl    = document.getElementById('team-red-btn');
+
+blueBtnEl.addEventListener('click', () => {
+  selectedTeam = 'blue';
+  blueBtnEl.classList.add('active');
+  redBtnEl.classList.remove('active');
+  teamHint.textContent = '🔵 Team Blue selected — now pick your fighter!';
+  teamHint.style.color = '#88bbff';
+});
+
+redBtnEl.addEventListener('click', () => {
+  selectedTeam = 'red';
+  redBtnEl.classList.add('active');
+  blueBtnEl.classList.remove('active');
+  teamHint.textContent = '🔴 Team Red selected — now pick your fighter!';
+  teamHint.style.color = '#ffaaaa';
+});
 
 for (const cls of CLASSES) {
   const hex  = '#' + cls.bodyColor.toString(16).padStart(6, '0');
@@ -72,7 +94,18 @@ for (const cls of CLASSES) {
     </div>
     <div class="c-desc">"${cls.desc}"</div>
   `;
-  card.addEventListener('click', () => startGame(cls));
+  card.addEventListener('click', () => {
+    if (!selectedTeam) {
+      teamHint.textContent = '⚠️ Pick a team first!';
+      teamHint.style.color = '#ffaa00';
+      setTimeout(() => {
+        teamHint.textContent = '↑ Pick a team to unlock your fighter';
+        teamHint.style.color = '';
+      }, 2000);
+      return;
+    }
+    startGame(cls, selectedTeam);
+  });
   grid.appendChild(card);
 }
 
@@ -111,7 +144,7 @@ function copyToClipboard(text, btn, label = 'Copy link') {
 }
 
 // ── Game ──────────────────────────────────────────────────────
-function startGame(cls) {
+function startGame(cls, team) {
   selectEl.style.display = 'none';
   overlayEl.style.display = 'flex';
 
@@ -127,9 +160,9 @@ function startGame(cls) {
   crosshair.setWeapon(cls);
 
   // Pick the right viewmodel for this class (null-object for classes without one)
-  const noVM = { show(){}, hide(){}, shoot(){}, setADS(){}, update(){} };
-  const viewmodel = cls.id === 'rusher' ? new Viewmodel(camera)
-                  : cls.id === 'tank'   ? new M4Viewmodel(camera)
+  const noVM = { show(){}, hide(){}, shoot(){}, setADS(){}, update(){}, reload(){} };
+  const viewmodel = cls.id === 'snake'   ? new Viewmodel(camera)
+                  : cls.id === 'emperor' ? new M4Viewmodel(camera)
                   : noVM;
   viewmodel.show();
 
@@ -160,7 +193,7 @@ function startGame(cls) {
   });
 
   // ── P2P connection ────────────────────────────────────────
-  network.start(cls, camera).then(url => {
+  network.start(cls, camera, team).then(url => {
     document.getElementById('overlay-invite-url').textContent = url;
     document.getElementById('invite-panel').style.display = 'flex';
     document.getElementById('overlay-invite-copy').onclick = () => {
@@ -187,6 +220,7 @@ function startGame(cls) {
     startGameMusic();
     overlayEl.style.display = 'none';
     hudEl.style.display = 'block';
+    ui.setTeam(team);
     ui.setStatus(network.isHost ? '🟢 Hosting' : '🟢 Connected');
     network.onPeerCount = (n) => {
       ui.setStatus(`🟢 ${n + 1} player${n + 1 > 1 ? 's' : ''} online`);
@@ -248,6 +282,24 @@ function startGame(cls) {
   network.onKill = (name) => {
     ui.addKillFeed(`You killed ${name} 💀`);
     ui.setKills(ui._kills + 1);
+    network.sendTeamKill(team); // broadcast that our team scored
+  };
+
+  const WIN_SCORE = 30;
+  network.onTeamKill = (scoringTeam) => {
+    const winner = ui.addTeamKill(scoringTeam, WIN_SCORE);
+    if (winner) {
+      const banner  = document.getElementById('winner-banner');
+      const textEl  = document.getElementById('winner-text');
+      const isWin   = winner === team;
+      const color   = winner === 'blue' ? '#66aaff' : '#ff6666';
+      textEl.style.color = color;
+      textEl.innerHTML   = isWin
+        ? `🏆 TEAM ${winner.toUpperCase()} WINS!<br><span style="font-size:1.4rem">Your team won!</span>`
+        : `💀 TEAM ${winner.toUpperCase()} WINS!<br><span style="font-size:1.4rem">Your team lost...</span>`;
+      banner.style.display = 'flex';
+      document.getElementById('winner-reload').onclick = () => location.reload();
+    }
   };
   network.onDied = () => handleDeath();          // backup in case network fires it directly
 
