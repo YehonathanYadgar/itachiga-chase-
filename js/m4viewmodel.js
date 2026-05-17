@@ -1,61 +1,35 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
-// ── Hip-fire and ADS poses (applied to the holder group) ──────
-const HIP_POS = new THREE.Vector3(0.22, -0.24, -0.36);
-const HIP_ROT = new THREE.Euler(-0.04, 0.08, 0.02, 'YXZ');
-const ADS_POS = new THREE.Vector3(0, -0.13, -0.36);
-const ADS_ROT = new THREE.Euler(-0.02, 0, 0, 'YXZ');
-
 // Target length of the gun's longest dimension, in world units
-const TARGET_LENGTH = 0.6;
-
-// Orientation correction applied to the raw FBX (barrel should point -Z).
-// Model loads with the barrel along +X; rotating +90° about Y aims it forward.
+const TARGET_LENGTH = 0.5;
+// Orientation correction so the barrel points -Z (forward)
 const MODEL_ROT = new THREE.Euler(0, Math.PI / 2, 0, 'YXZ');
 
-export class M4Viewmodel {
-  constructor(camera) {
-    this.camera    = camera;
-    this.group     = null;   // holder group, animated
-    this._mixer    = null;
-    this._loaded   = false;
-    this._visible  = false;
-    this._isADS    = false;
-    this._adsBlend = 0;
+// side: +1 = right gun, -1 = left gun
+function hipPos(side) { return new THREE.Vector3(side * 0.27, -0.26, -0.42); }
+function hipRot(side) { return new THREE.Euler(-0.03, side * 0.13, side * 0.05, 'YXZ'); }
 
-    this._idleT = 0;
-    this._walkT = 0;
+function smoothstep(t) { return t * t * (3 - 2 * t); }
+function clamp01(t)    { return Math.max(0, Math.min(1, t)); }
 
-    this._rZ = 0; this._vZ = 0;
-    this._rY = 0; this._vY = 0;
-    this._rX = 0; this._vX = 0;
-  }
-
-  show() {
-    if (this._visible) return;
-    this._visible = true;
-
-    const loader = new FBXLoader();
-    loader.load('assets/M4a4.fbx', (fbx) => {
-      // Orientation correction first, so the bounding box reflects it
+// Load + scale + centre one M4 model. Returns a Promise<Object3D>.
+function loadM4() {
+  return new Promise((resolve, reject) => {
+    new FBXLoader().load('assets/M4a4.fbx', (fbx) => {
       fbx.rotation.copy(MODEL_ROT);
       fbx.updateMatrixWorld(true);
 
-      // Measure the model's true size (works regardless of FBX native units)
-      const bbox0   = new THREE.Box3().setFromObject(fbx);
-      const size    = bbox0.getSize(new THREE.Vector3());
+      let bb = new THREE.Box3().setFromObject(fbx);
+      const size    = bb.getSize(new THREE.Vector3());
       const longest = Math.max(size.x, size.y, size.z) || 1;
-      const scale   = TARGET_LENGTH / longest;
-      fbx.scale.setScalar(scale);
+      fbx.scale.setScalar(TARGET_LENGTH / longest);
       fbx.updateMatrixWorld(true);
 
-      // Re-center so the model's geometric centre sits at the holder origin
-      const bbox1  = new THREE.Box3().setFromObject(fbx);
-      const center = bbox1.getCenter(new THREE.Vector3());
+      bb = new THREE.Box3().setFromObject(fbx);
+      const center = bb.getCenter(new THREE.Vector3());
       fbx.position.sub(center);
 
-      // Always render on top of world geometry
       fbx.traverse(child => {
         if (child.isMesh) {
           const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -63,74 +37,124 @@ export class M4Viewmodel {
           child.renderOrder = 999;
         }
       });
+      resolve(fbx);
+    }, undefined, reject);
+  });
+}
 
-      // Holder group — this is what gets positioned/animated
+// ── Dual-wield M4 viewmodel ───────────────────────────────────
+export class M4Viewmodel {
+  constructor(camera) {
+    this.camera   = camera;
+    this._guns    = [];   // { holder, side, rZ,vZ, rY,vY, rX,vX }
+    this._visible = false;
+    this._loaded  = false;
+    this._isADS   = false;
+
+    this._idleT     = 0;
+    this._walkT     = 0;
+    this._shootSide = 0;  // alternates left/right recoil
+
+    this._isReloading = false;
+    this._reloadT     = 0;
+    this._reloadDur   = 2.4;
+  }
+
+  show() {
+    if (this._visible) return;
+    this._visible = true;
+
+    [+1, -1].forEach(async (side) => {
+      const model  = await loadM4();
       const holder = new THREE.Group();
-      holder.add(fbx);
-      holder.position.copy(HIP_POS);
-      holder.rotation.copy(HIP_ROT);
-      this.group = holder;
+      holder.add(model);
+      holder.position.copy(hipPos(side));
+      holder.rotation.copy(hipRot(side));
       this.camera.add(holder);
-
-      if (fbx.animations && fbx.animations.length > 0) {
-        this._mixer = new THREE.AnimationMixer(fbx);
-        const idle = this._mixer.clipAction(fbx.animations[0]);
-        idle.setLoop(THREE.LoopRepeat);
-        idle.play();
-      }
-
-      this._loaded = true;
+      this._guns.push({ holder, side, rZ: 0, vZ: 0, rY: 0, vY: 0, rX: 0, vX: 0 });
+      if (this._guns.length === 2) this._loaded = true;
     });
   }
 
   hide() {
-    if (this.group) { this.camera.remove(this.group); this.group = null; }
+    this._guns.forEach(g => this.camera.remove(g.holder));
+    this._guns    = [];
     this._loaded  = false;
     this._visible = false;
   }
 
+  // Alternating recoil — each shot kicks the opposite gun
   shoot() {
-    if (!this._loaded) return;
-    this._vZ += 0.04;
-    this._vY += 0.022;
-    this._vX -= 0.055;
+    if (!this._loaded || this._isReloading) return;
+    const g = this._guns[this._shootSide % this._guns.length];
+    g.vZ += 0.06;   // kick back
+    g.vY += 0.03;   // kick up
+    g.vX += 0.07;   // muzzle climb
+    this._shootSide++;
   }
 
-  setADS(on) { this._isADS = on; }
+  reload(durationMs) {
+    if (!this._loaded || this._isReloading) return;
+    this._isReloading = true;
+    this._reloadT     = 0;
+    this._reloadDur   = (durationMs || 2400) / 1000;
+  }
+
+  setADS(on) { this._isADS = on; } // dual-wield: no ADS movement
 
   update(delta, moveSpeed) {
-    if (!this._visible || !this.group) return;
+    if (!this._loaded) return;
 
-    if (this._mixer) this._mixer.update(delta);
-
+    // ── Timers ────────────────────────────────────────────────
     this._idleT += delta;
     const walkFrac = Math.min(1, moveSpeed / 6);
     this._walkT += delta * walkFrac * 9;
 
     const idleY = Math.sin(this._idleT * 1.3)  * 0.003;
     const idleX = Math.sin(this._idleT * 0.75) * 0.0012;
-    const wY = Math.sin(this._walkT)       * 0.022 * walkFrac;
-    const wX = Math.sin(this._walkT * 0.5) * 0.009 * walkFrac;
+    const wY = Math.sin(this._walkT)       * 0.02  * walkFrac;
+    const wX = Math.sin(this._walkT * 0.5) * 0.008 * walkFrac;
 
+    // ── Reload animation (shared progress) ────────────────────
+    let tilt = 0, chargeZ = 0;
+    if (this._isReloading) {
+      this._reloadT += delta;
+      const p = clamp01(this._reloadT / this._reloadDur);
+      if      (p < 0.16) tilt = smoothstep(p / 0.16);          // bring guns down
+      else if (p < 0.80) tilt = 1;                             // hold (mag swap)
+      else               tilt = smoothstep(1 - (p - 0.80) / 0.20); // raise back up
+      // Charge-handle jerk near the end
+      if (p >= 0.66 && p <= 0.78) {
+        chargeZ = Math.sin(((p - 0.66) / 0.12) * Math.PI) * 0.05;
+      }
+      if (p >= 1) this._isReloading = false;
+    }
+    const reloadRotX = -tilt * 0.5;   // barrels dip down
+    const reloadPosY = -tilt * 0.07;  // guns lower
+
+    // ── Per-gun spring + transform ────────────────────────────
     const K = 22, D = 9;
-    this._vZ += (-K * this._rZ - D * this._vZ) * delta; this._rZ += this._vZ * delta;
-    this._vY += (-K * this._rY - D * this._vY) * delta; this._rY += this._vY * delta;
-    this._vX += (-K * this._rX - D * this._vX) * delta; this._rX += this._vX * delta;
+    for (const g of this._guns) {
+      g.vZ += (-K * g.rZ - D * g.vZ) * delta; g.rZ += g.vZ * delta;
+      g.vY += (-K * g.rY - D * g.vY) * delta; g.rY += g.vY * delta;
+      g.vX += (-K * g.rX - D * g.vX) * delta; g.rX += g.vX * delta;
 
-    const adsT = this._isADS ? 1 : 0;
-    this._adsBlend += (adsT - this._adsBlend) * Math.min(1, delta * 14);
+      const bp = hipPos(g.side);
+      const br = hipRot(g.side);
+      const reloadRotZ = -g.side * tilt * 0.3;   // tilt toward centre
+      const reloadPosX = -g.side * tilt * 0.06;  // pull inward
 
-    const px = HIP_POS.x + (ADS_POS.x - HIP_POS.x) * this._adsBlend;
-    const py = HIP_POS.y + (ADS_POS.y - HIP_POS.y) * this._adsBlend;
-    const pz = HIP_POS.z + (ADS_POS.z - HIP_POS.z) * this._adsBlend;
-    const ry = HIP_ROT.y + (ADS_ROT.y - HIP_ROT.y) * this._adsBlend;
-    const rz = HIP_ROT.z * (1 - this._adsBlend);
-
-    this.group.position.set(
-      px + idleX + wX,
-      py + idleY + wY + this._rY,
-      pz + this._rZ
-    );
-    this.group.rotation.set(HIP_ROT.x + this._rX, ry, rz, 'YXZ');
+      g.holder.position.set(
+        bp.x + idleX + wX + reloadPosX,
+        bp.y + idleY + wY + reloadPosY + g.rY,
+        bp.z + g.rZ + chargeZ
+      );
+      g.holder.rotation.set(
+        br.x + g.rX + reloadRotX,
+        br.y,
+        br.z + reloadRotZ,
+        'YXZ'
+      );
+    }
   }
 }
