@@ -75,6 +75,40 @@ for (const cls of CLASSES) {
   grid.appendChild(card);
 }
 
+// ── Clipboard helper (Clipboard API + execCommand fallback) ───
+function copyToClipboard(text, btn, label = 'Copy link') {
+  const succeed = () => {
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => { btn.textContent = label; }, 2000);
+  };
+  const fail = () => {
+    btn.textContent = '❌ Failed — copy manually';
+    setTimeout(() => { btn.textContent = label; }, 3000);
+  };
+
+  // Fallback: hidden textarea + execCommand (works even when Clipboard API is blocked)
+  const execFallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy') ? succeed() : fail();
+    } catch {
+      fail();
+    }
+    document.body.removeChild(ta);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(succeed).catch(execFallback);
+  } else {
+    execFallback();
+  }
+}
+
 // ── Game ──────────────────────────────────────────────────────
 function startGame(cls) {
   selectEl.style.display = 'none';
@@ -124,12 +158,7 @@ function startGame(cls) {
     document.getElementById('overlay-invite-url').textContent = url;
     document.getElementById('invite-panel').style.display = 'flex';
     document.getElementById('overlay-invite-copy').onclick = () => {
-      navigator.clipboard.writeText(url).then(() => {
-        document.getElementById('overlay-invite-copy').textContent = '✅ Copied!';
-        setTimeout(() => {
-          document.getElementById('overlay-invite-copy').textContent = 'Copy link';
-        }, 2000);
-      });
+      copyToClipboard(url, document.getElementById('overlay-invite-copy'));
     };
     network.onPeerCount = (n) => {
       document.getElementById('overlay-peers').textContent =
