@@ -8,6 +8,7 @@ import { spawnEnemies } from './enemies.js';
 import { UI }           from './ui.js';
 import { Network }      from './network.js';
 import { Viewmodel }    from './viewmodel.js';
+import { M4Viewmodel }  from './m4viewmodel.js';
 
 // ── Menu music ────────────────────────────────────────────────
 const menuMusic  = document.getElementById('menu-music');
@@ -125,8 +126,12 @@ function startGame(cls) {
   const crosshair  = new Crosshair(camera);
   crosshair.setWeapon(cls);
 
-  const viewmodel = new Viewmodel(camera);
-  if (cls.id === 'rusher') viewmodel.show();
+  // Pick the right viewmodel for this class (null-object for classes without one)
+  const noVM = { show(){}, hide(){}, shoot(){}, setADS(){}, update(){} };
+  const viewmodel = cls.id === 'rusher' ? new Viewmodel(camera)
+                  : cls.id === 'sniper' ? new M4Viewmodel(camera)
+                  : noVM;
+  viewmodel.show();
 
   const enemies  = spawnEnemies(scene);
   const network  = new Network(scene);

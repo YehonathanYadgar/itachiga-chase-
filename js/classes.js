@@ -29,7 +29,7 @@ export const CLASSES = [
     damage:       95,
     fireRate:     1100,
     recoil:       0.045,
-    weapon:       'RIFLE',
+    weapon:       'M4A4',
     pellets:      1,
     spread:       0.002,        // near-perfect accuracy
     ammo:         Infinity,
