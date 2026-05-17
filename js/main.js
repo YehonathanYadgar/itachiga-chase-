@@ -128,8 +128,8 @@ function startGame(cls) {
 
   // Pick the right viewmodel for this class (null-object for classes without one)
   const noVM = { show(){}, hide(){}, shoot(){}, setADS(){}, update(){} };
-  const viewmodel = cls.id === 'rusher'     ? new Viewmodel(camera)
-                  : cls.id === 'shotgunner' ? new M4Viewmodel(camera)
+  const viewmodel = cls.id === 'rusher' ? new Viewmodel(camera)
+                  : cls.id === 'tank'   ? new M4Viewmodel(camera)
                   : noVM;
   viewmodel.show();
 

@@ -11,7 +11,7 @@ export const CLASSES = [
     damage:       28,
     fireRate:     110,          // fast burst (minigun feel)
     recoil:       0.04,
-    weapon:       'MINIGUN',
+    weapon:       'M4A4',
     pellets:      1,
     spread:       0.055,
     ammo:         Infinity,
@@ -66,7 +66,7 @@ export const CLASSES = [
     damage:       18,
     fireRate:     700,
     recoil:       0.065,
-    weapon:       'M4A4',
+    weapon:       'SHOTGUN',
     pellets:      8,
     spread:       0.16,
     ammo:         Infinity,
