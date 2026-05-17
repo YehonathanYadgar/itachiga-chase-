@@ -135,6 +135,7 @@ function startGame(cls) {
 
   let playerHealth = cls.health;
   let mouseDown    = false;
+  let isDead       = false;
 
   // ── ADS (right-click) ─────────────────────────────────────
   renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
@@ -201,19 +202,17 @@ function startGame(cls) {
     overlayEl.style.display = 'flex';
   });
 
-  // ── Network callbacks ─────────────────────────────────────
-  network.onHit = (dmg) => {
-    playerHealth = Math.max(0, playerHealth - dmg);
-  };
-  network.onKill = (name) => {
-    ui.addKillFeed(`You killed ${name} 💀`);
-    ui.setKills(ui._kills + 1);
-  };
-  network.onDied = () => {
+  // ── Death handler ─────────────────────────────────────────
+  // NOTE: network.onDied is never called on the killed player's side because
+  // RemotePlayer doesn't exist for self — death is detected via onHit reaching 0.
+  // handleDeath() is the single source of truth; isDead prevents double-trigger.
+  function handleDeath() {
+    if (isDead) return;
+    isDead       = true;
     playerHealth = 0;
+
     ui.addKillFeed('💀 You were killed! Respawning in 15s...');
 
-    // Respawn countdown
     const cdEl = document.getElementById('respawn-countdown');
     cdEl.style.display = 'flex';
     let secs = 15;
@@ -226,14 +225,26 @@ function startGame(cls) {
     }, 1000);
 
     setTimeout(() => {
+      isDead         = false;
       playerHealth   = cls.health;
-      // Reset velocity and teleport back to spawn point
       controls._velX = 0;
       controls._velZ = 0;
       controls._vy   = 0;
-      camera.position.set(0, 1.7, 5);
+      camera.position.set(0, 1.7, 5); // teleport back to spawn
     }, 15000);
+  }
+
+  // ── Network callbacks ─────────────────────────────────────
+  network.onHit = (dmg) => {
+    if (isDead) return;                          // ignore hits while already dead
+    playerHealth = Math.max(0, playerHealth - dmg);
+    if (playerHealth <= 0) handleDeath();        // trigger death screen on the killed player
   };
+  network.onKill = (name) => {
+    ui.addKillFeed(`You killed ${name} 💀`);
+    ui.setKills(ui._kills + 1);
+  };
+  network.onDied = () => handleDeath();          // backup in case network fires it directly
 
   // ── Reload callbacks ──────────────────────────────────────
   shooter.onReloadStart = () => {
@@ -260,7 +271,7 @@ function startGame(cls) {
 
   const doShoot = () => {
     if (!controls.locked) return;
-    if (playerHealth <= 0) return; // dead players can't shoot
+    if (isDead) return; // dead players can't shoot
     shooter.tryShoot(enemies, performance.now(), network.getMeshMap());
   };
 
