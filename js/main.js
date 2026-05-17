@@ -109,37 +109,48 @@ for (const cls of CLASSES) {
   grid.appendChild(card);
 }
 
-// ── Clipboard helper (Clipboard API + execCommand fallback) ───
+// ── Clipboard helper ──────────────────────────────────────────
+// Runs the synchronous execCommand copy FIRST — it must execute inside the
+// click's user-activation window. A deferred .catch() loses that activation,
+// which is why the old Clipboard-API-first approach silently failed.
 function copyToClipboard(text, btn, label = 'Copy link') {
   const succeed = () => {
     btn.textContent = '✅ Copied!';
     setTimeout(() => { btn.textContent = label; }, 2000);
   };
   const fail = () => {
-    btn.textContent = '❌ Failed — copy manually';
-    setTimeout(() => { btn.textContent = label; }, 3000);
-  };
-
-  // Fallback: hidden textarea + execCommand (works even when Clipboard API is blocked)
-  const execFallback = () => {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    try {
-      document.execCommand('copy') ? succeed() : fail();
-    } catch {
-      fail();
+    btn.textContent = '❌ Select & Ctrl+C';
+    // Select the on-screen URL so the user can copy it manually
+    const urlEl = document.getElementById('overlay-invite-url');
+    if (urlEl) {
+      const range = document.createRange();
+      range.selectNodeContents(urlEl);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
-    document.body.removeChild(ta);
+    setTimeout(() => { btn.textContent = label; }, 4000);
   };
 
+  // Synchronous textarea + execCommand — reliable inside a click handler
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  document.body.removeChild(ta);
+
+  if (ok) { succeed(); return; }
+
+  // execCommand unavailable — try the async Clipboard API as a last resort
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(succeed).catch(execFallback);
+    navigator.clipboard.writeText(text).then(succeed).catch(fail);
   } else {
-    execFallback();
+    fail();
   }
 }
 
