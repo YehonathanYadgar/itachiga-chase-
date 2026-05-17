@@ -209,7 +209,7 @@ export class Network {
             target.die();
             if (msg.targetId === this.myId && this.onDied) this.onDied();
             if (id === this.myId && this.onKill) this.onKill(target.name);
-            setTimeout(() => target.respawn(), 5000);
+            setTimeout(() => target.respawn(), 15000);
           }
         }
         // Self-damage when WE are hit
@@ -334,12 +334,12 @@ class RemotePlayer {
   }
 
   die() {
-    this.group.rotation.z = Math.PI / 2;
-    this.group.position.y = -0.3;
+    this.group.visible = false; // disappear completely, not lie on floor
   }
 
   respawn() {
-    this.health = this.maxHealth;
+    this.health           = this.maxHealth;
+    this.group.visible    = true;
     this.group.rotation.z = 0;
     this.group.position.y = 0;
     this._drawBar();

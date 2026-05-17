@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const RESPAWN_TIME = 5000;
+const RESPAWN_TIME = 15000; // 15 seconds
 
 export class Enemy {
   constructor(scene, position, name, color, maxHealth = 100) {
@@ -12,6 +12,7 @@ export class Enemy {
 
     this.group = new THREE.Group();
     this.group.position.copy(position);
+    this._spawnPos = position.clone(); // remember where to respawn
 
     // Body
     this.bodyMat = new THREE.MeshLambertMaterial({ color });
@@ -93,19 +94,19 @@ export class Enemy {
 
   _die() {
     this.alive = false;
-    this.group.rotation.z = Math.PI / 2;
-    this.group.position.y = -0.35;
-    this.meshes.forEach(m => m.material.color.setHex(0x444444));
+    this.group.visible = false; // disappear completely — no lying on the floor
+    setTimeout(() => this._respawn(), RESPAWN_TIME);
+  }
 
-    setTimeout(() => {
-      this.health = this.maxHealth;
-      this.alive = true;
-      this.group.rotation.z = 0;
-      this.group.position.y = 0;
-      this.bodyMat.color.setHex(this._color);
-      this.headMat.color.setHex(0xffcc88);
-      this._updateBar();
-    }, RESPAWN_TIME);
+  _respawn() {
+    this.health    = this.maxHealth;
+    this.alive     = true;
+    this.group.visible    = true;
+    this.group.rotation.z = 0;
+    this.group.position.copy(this._spawnPos); // back to starting spot
+    this.bodyMat.color.setHex(this._color);
+    this.headMat.color.setHex(0xffcc88);
+    this._updateBar();
   }
 }
 

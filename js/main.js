@@ -210,9 +210,29 @@ function startGame(cls) {
     ui.setKills(ui._kills + 1);
   };
   network.onDied = () => {
-    ui.addKillFeed('You were killed! Respawning...');
     playerHealth = 0;
-    setTimeout(() => { playerHealth = cls.health; }, 5000);
+    ui.addKillFeed('💀 You were killed! Respawning in 15s...');
+
+    // Respawn countdown
+    const cdEl = document.getElementById('respawn-countdown');
+    cdEl.style.display = 'flex';
+    let secs = 15;
+    cdEl.innerHTML = `💀 YOU DIED<br><span id="cd-num">15</span>s`;
+    const iv = setInterval(() => {
+      secs--;
+      const numEl = document.getElementById('cd-num');
+      if (numEl) numEl.textContent = secs;
+      if (secs <= 0) { clearInterval(iv); cdEl.style.display = 'none'; }
+    }, 1000);
+
+    setTimeout(() => {
+      playerHealth   = cls.health;
+      // Reset velocity and teleport back to spawn point
+      controls._velX = 0;
+      controls._velZ = 0;
+      controls._vy   = 0;
+      camera.position.set(0, 1.7, 5);
+    }, 15000);
   };
 
   // ── Reload callbacks ──────────────────────────────────────
@@ -240,6 +260,7 @@ function startGame(cls) {
 
   const doShoot = () => {
     if (!controls.locked) return;
+    if (playerHealth <= 0) return; // dead players can't shoot
     shooter.tryShoot(enemies, performance.now(), network.getMeshMap());
   };
 

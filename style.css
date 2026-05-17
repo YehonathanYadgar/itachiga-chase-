@@ -297,6 +297,27 @@ canvas { display: block; }
   transition: opacity 0.15s;
 }
 
+/* Respawn countdown */
+#respawn-countdown {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 2px solid rgba(255, 60, 60, 0.5);
+  border-radius: 14px;
+  padding: 22px 48px;
+  font-size: 1.5rem; font-weight: bold; letter-spacing: 3px;
+  color: #ff4444;
+  text-shadow: 0 0 18px rgba(255, 0, 0, 0.7);
+  text-align: center; line-height: 1.5;
+  pointer-events: none;
+}
+#respawn-countdown #cd-num {
+  font-size: 3.5rem; line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 0 24px rgba(255, 80, 80, 0.9);
+}
+
 /* Invite bar */
 #invite-bar {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
