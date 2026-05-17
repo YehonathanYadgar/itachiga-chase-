@@ -10,8 +10,9 @@ const ADS_ROT = new THREE.Euler(-0.02, 0, 0, 'YXZ');
 // Target length of the gun's longest dimension, in world units
 const TARGET_LENGTH = 0.6;
 
-// Orientation correction applied to the raw FBX (barrel should point -Z)
-const MODEL_ROT = new THREE.Euler(0, 0, 0, 'YXZ');
+// Orientation correction applied to the raw FBX (barrel should point -Z).
+// Model loads with the barrel along +X; rotating +90° about Y aims it forward.
+const MODEL_ROT = new THREE.Euler(0, Math.PI / 2, 0, 'YXZ');
 
 export class M4Viewmodel {
   constructor(camera) {
