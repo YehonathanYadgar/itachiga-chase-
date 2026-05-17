@@ -7,6 +7,7 @@ const GRAVITY     = 26;
 const JUMP_FORCE  = 9.5;
 const ACCEL       = 22;
 const FRICTION    = 18;
+const AIR_ACCEL   = 6;     // gentle mid-air steering — momentum is preserved
 const SPRINT_MULT = 1.65;
 const ADS_MULT    = 0.45;
 
@@ -81,17 +82,32 @@ export class Controls {
                       : this.isADS       ? this.speed * ADS_MULT
                       : this.speed;
 
-    if (wLen > 0) {
-      const n = targetSpeed / wLen;
-      wX *= n; wZ *= n;
-      const t = Math.min(1, ACCEL * delta);
-      this._velX += (wX - this._velX) * t;
-      this._velZ += (wZ - this._velZ) * t;
-    } else {
-      const t = Math.min(1, FRICTION * delta);
-      this._velX *= (1 - t);
-      this._velZ *= (1 - t);
+    if (this.onGround) {
+      // Grounded: accelerate toward wish dir, friction when idle
+      if (wLen > 0) {
+        const n = targetSpeed / wLen;
+        wX *= n; wZ *= n;
+        const t = Math.min(1, ACCEL * delta);
+        this._velX += (wX - this._velX) * t;
+        this._velZ += (wZ - this._velZ) * t;
+      } else {
+        const t = Math.min(1, FRICTION * delta);
+        this._velX *= (1 - t);
+        this._velZ *= (1 - t);
+      }
+    } else if (wLen > 0) {
+      // Airborne: keep momentum, allow only light steering (no friction)
+      const n = 1 / wLen;
+      this._velX += wX * n * AIR_ACCEL * delta;
+      this._velZ += wZ * n * AIR_ACCEL * delta;
+      const cap = this.speed * SPRINT_MULT;
+      const sp  = Math.sqrt(this._velX * this._velX + this._velZ * this._velZ);
+      if (sp > cap) {
+        this._velX *= cap / sp;
+        this._velZ *= cap / sp;
+      }
     }
+    // Airborne with no input → momentum is fully preserved (no friction)
 
     this.camera.position.x = Math.max(-BOUND, Math.min(BOUND,
       this.camera.position.x + this._velX * delta));
