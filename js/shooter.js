@@ -26,6 +26,7 @@ export class Shooter {
     this.onReloadStart    = null;
     this.onReloadComplete = null;
     this.controls         = null;
+    this.muzzleProvider   = null; // () => THREE.Vector3 world muzzle pos, or null
   }
 
   configure(cls) {
@@ -82,7 +83,17 @@ export class Shooter {
       const hits     = this.raycaster.intersectObjects(allMeshes, false);
       const hitPoint = hits.length > 0 ? hits[0].point : null;
 
-      this._spawnBullet(this.camera.position, dir, hitPoint);
+      // Visual bullet: spawn from the gun's muzzle if one is available,
+      // otherwise from the camera. Hit detection above always uses the camera.
+      const aimEnd = hitPoint
+        ? hitPoint.clone()
+        : this.camera.position.clone().addScaledVector(dir, 120);
+      const muzzle = this.muzzleProvider ? this.muzzleProvider() : null;
+      const start  = muzzle
+        ? muzzle
+        : this.camera.position.clone().addScaledVector(dir, 0.7);
+      const visualDir = aimEnd.clone().sub(start).normalize();
+      this._spawnBullet(start, visualDir, aimEnd);
 
       if (hitPoint) {
         const mesh       = hits[0].object;
@@ -104,7 +115,9 @@ export class Shooter {
   }
 
   // ── Animated flying bullet ────────────────────────────────────
-  _spawnBullet(origin, dir, hitPoint) {
+  // start: exact world spawn point. dir: normalized travel direction.
+  // endPoint: where the bullet should stop (hit point or far point).
+  _spawnBullet(start, dir, endPoint) {
     // Bullet core — elongated sphere oriented along travel direction
     const coreGeo = new THREE.SphereGeometry(0.055, 6, 4);
     const coreMat = new THREE.MeshBasicMaterial({
@@ -119,7 +132,6 @@ export class Shooter {
     core.quaternion.copy(quat);
     core.scale.set(0.7, 0.7, 4.5); // elongated along direction
 
-    const start = origin.clone().addScaledVector(dir, 0.7);
     core.position.copy(start);
     this.scene.add(core);
 
@@ -134,7 +146,7 @@ export class Shooter {
     const trail = new THREE.Line(trailGeo, trailMat);
     this.scene.add(trail);
 
-    const maxDist = hitPoint ? Math.max(1, origin.distanceTo(hitPoint)) : 120;
+    const maxDist = Math.max(1, start.distanceTo(endPoint));
 
     this._bullets.push({
       core, trail,

@@ -166,6 +166,11 @@ function startGame(cls, team) {
                   : noVM;
   viewmodel.show();
 
+  // JOAB's dual M4s: bullets spawn from whichever barrel fires next
+  if (cls.id === 'joab') {
+    shooter.muzzleProvider = () => viewmodel.getNextMuzzlePos();
+  }
+
   const enemies  = spawnEnemies(scene);
   const network  = new Network(scene);
   const ui       = new UI();
