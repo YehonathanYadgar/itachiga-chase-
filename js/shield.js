@@ -83,6 +83,14 @@ export class ShieldPower {
     this._wallGlow.material.opacity  = 0;
     this._wallOuter.material.opacity = 0;
 
+    // Place the wall in the world once — it will NOT move after this
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    const wallPos = this.camera.position.clone().addScaledVector(dir, WALL_DIST);
+    wallPos.y = this.camera.position.y;
+    this._wallGroup.position.copy(wallPos);
+    this._wallGroup.lookAt(this.camera.position);  // face toward the player
+
     this._launchParticles();
     return true;
   }
@@ -147,17 +155,6 @@ export class ShieldPower {
     if (!this.isActive) return;
 
     this.shieldTimer += dt;
-
-    // ── Position wall in front of the camera ──────────────────────────────
-    const dir = new THREE.Vector3();
-    this.camera.getWorldDirection(dir);
-
-    const wallPos = this.camera.position.clone()
-      .addScaledVector(dir, WALL_DIST);
-    wallPos.y = this.camera.position.y;
-
-    this._wallGroup.position.copy(wallPos);
-    this._wallGroup.lookAt(this.camera.position); // face back toward the player
 
     // ── Fade in, then pulse / warn ─────────────────────────────────────────
     const fadeIn   = Math.min(1, this.shieldTimer / 0.35);
