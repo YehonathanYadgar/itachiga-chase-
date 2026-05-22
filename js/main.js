@@ -37,6 +37,16 @@ gameMusic.addEventListener('ended', () => {
   gameMusicTimer = setTimeout(startGameMusic, breakMs);
 });
 
+// ── JOAB hit SFX (plays only when the local JOAB takes damage) ─
+const joabHitSfx = new Audio('assets/joab-hit.mp3');
+joabHitSfx.volume = 0.85;
+function playJoabHit() {
+  try {
+    joabHitSfx.currentTime = 0;
+    joabHitSfx.play().catch(() => {});
+  } catch {}
+}
+
 musicBtn.addEventListener('click', () => {
   if (musicOn) {
     menuMusic.pause();
@@ -307,6 +317,7 @@ function startGame(cls, team) {
       return;
     }
     playerHealth = Math.max(0, playerHealth - dmg);
+    if (cls.id === 'joab') playJoabHit();        // JOAB-only damage SFX
     if (playerHealth <= 0) handleDeath();
   };
   network.onKill = (name) => {
