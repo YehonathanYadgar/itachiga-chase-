@@ -16,6 +16,26 @@ const PEER_CFG = {
   path: '/',
   secure: true,
   debug: 0,
+  // ICE servers for WebRTC peer-to-peer.
+  //   STUN: helps two peers discover each other's public IP/port.
+  //   TURN: relays traffic when STUN can't punch through (symmetric NAT,
+  //         corporate / hotel / mobile-carrier firewalls). WITHOUT a TURN
+  //         server, peers on such networks see "incoming connection" but
+  //         the data channel never opens — exactly the bug we hit.
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      // Free public TURN (Open Relay Project)
+      { urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+    ],
+  },
 };
 
 function makeCode() {
@@ -136,7 +156,17 @@ export class Network {
   _hostOnConn(conn) {
     const pid = conn.peer;
 
+    // Watchdog: if the data channel doesn't open within 6s of the incoming
+    // connection event, the WebRTC handshake is failing — usually NAT/firewall.
+    const openWatchdog = setTimeout(() => {
+      console.warn('[net] WARN: conn from', pid,
+        'has not opened after 6s — WebRTC data channel is stuck. ' +
+        'Likely cause: NAT/firewall blocking peer-to-peer; TURN relay should kick in.');
+    }, 6000);
+
     conn.on('open', () => {
+      clearTimeout(openWatchdog);
+      console.log('[net] data channel OPEN with', pid);
       this._conns.set(pid, conn);
       if (this.onPeerCount) this.onPeerCount(this._conns.size);
 
@@ -160,12 +190,18 @@ export class Network {
     });
 
     conn.on('close', () => {
+      clearTimeout(openWatchdog);
+      console.log('[net] conn closed for', pid);
       this._conns.delete(pid);
       this._removeRemote(pid);
       this._relay({ t: 'left', from: pid });
       if (this.onPeerCount) this.onPeerCount(this._conns.size);
     });
-    conn.on('error', () => conn.close());
+    conn.on('error', err => {
+      clearTimeout(openWatchdog);
+      console.warn('[net] conn error from', pid, ':', err);
+      conn.close();
+    });
   }
 
   _relay(msg, excludeId = null) {
