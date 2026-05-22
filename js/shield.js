@@ -31,21 +31,21 @@ export class ShieldPower {
   // ── Build the glowing wall (3 stacked planes for a bloom effect) ─────────
   _buildWall() {
     // Core: solid-ish white  ← bigger so it actually covers Joab's body
-    const geo  = new THREE.PlaneGeometry(1.9, 2.8);
+    const geo  = new THREE.PlaneGeometry(2.4, 3.4);
     this._wallCore = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
       color: 0xd8f0ff, transparent: true, opacity: 0,
       depthWrite: false, side: THREE.DoubleSide,
     }));
 
     // Inner glow: slightly larger, additive
-    const geoG = new THREE.PlaneGeometry(2.6, 3.7);
+    const geoG = new THREE.PlaneGeometry(3.2, 4.4);
     this._wallGlow = new THREE.Mesh(geoG, new THREE.MeshBasicMaterial({
       color: 0x80d0ff, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     }));
 
     // Outer bloom: even larger, very faint
-    const geoO = new THREE.PlaneGeometry(3.6, 5.0);
+    const geoO = new THREE.PlaneGeometry(4.4, 6.0);
     this._wallOuter = new THREE.Mesh(geoO, new THREE.MeshBasicMaterial({
       color: 0x3080cc, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
@@ -162,9 +162,9 @@ export class ShieldPower {
     const warn     = timeLeft < 2.5;
     const pulse    = warn ? 0.5 + 0.5 * Math.sin(Date.now() * 0.016) : 1;
 
-    this._wallCore.material.opacity  = fadeIn * 0.76 * pulse;
-    this._wallGlow.material.opacity  = fadeIn * 0.20 * pulse;
-    this._wallOuter.material.opacity = fadeIn * 0.07 * pulse;
+    this._wallCore.material.opacity  = fadeIn * 0.22 * pulse;
+    this._wallGlow.material.opacity  = fadeIn * 0.12 * pulse;
+    this._wallOuter.material.opacity = fadeIn * 0.05 * pulse;
 
     // Wall turns red when about to expire
     const coreCol = warn ? 0xffd0d0 : 0xd8f0ff;
