@@ -14,12 +14,12 @@ import { ShieldPower }  from './shield.js';
 // ── Menu music ────────────────────────────────────────────────
 const menuMusic  = document.getElementById('menu-music');
 const musicBtn   = document.getElementById('music-btn');
-menuMusic.volume = 0.4;
+menuMusic.volume = 0.2;   // was 0.4 — halved
 let musicOn = false;
 
 // ── In-game music (plays with random breaks) ──────────────────
 const gameMusic = document.getElementById('game-music');
-gameMusic.volume = 0.22;
+gameMusic.volume = 0.11;  // was 0.22 — halved
 let gameMusicTimer = null;
 
 function startGameMusic() {
