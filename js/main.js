@@ -14,12 +14,12 @@ import { ShieldPower }  from './shield.js';
 // ── Menu music ────────────────────────────────────────────────
 const menuMusic  = document.getElementById('menu-music');
 const musicBtn   = document.getElementById('music-btn');
-menuMusic.volume = 0.4;
+menuMusic.volume = 0.2;   // was 0.4 — halved
 let musicOn = false;
 
 // ── In-game music (plays with random breaks) ──────────────────
 const gameMusic = document.getElementById('game-music');
-gameMusic.volume = 0.22;
+gameMusic.volume = 0.11;  // was 0.22 — halved
 let gameMusicTimer = null;
 
 function startGameMusic() {
@@ -241,14 +241,14 @@ function startGame(cls, team) {
   network.start(cls, camera, team).then(url => {
     urlEl.textContent = url;
     statusEl.textContent = network.isHost
-      ? '✅ Hosting — share the link below'
-      : '✅ Connected to host';
+      ? '✅ Hosting this room — share the link below to invite friends'
+      : '✅ Joined the host — waiting for the host to start';
     statusEl.style.color = '#88ff88';
     console.log('[net] start ok, isHost =', network.isHost, 'url =', url, 'myId =', network.myId);
   }).catch(err => {
     console.warn('[net] start failed:', err);
     urlEl.textContent = window.location.href;
-    statusEl.textContent = `⚠️ Couldn't reach host (${err.message || err.type || 'unknown'}) — playing solo`;
+    statusEl.textContent = `⚠️ Couldn't reach the network (${err.message || err.type || 'unknown'}) — playing solo`;
     statusEl.style.color = '#ffaa66';
   });
 

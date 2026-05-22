@@ -16,6 +16,26 @@ const PEER_CFG = {
   path: '/',
   secure: true,
   debug: 0,
+  // ICE servers for WebRTC peer-to-peer.
+  //   STUN: helps two peers discover each other's public IP/port.
+  //   TURN: relays traffic when STUN can't punch through (symmetric NAT,
+  //         corporate / hotel / mobile-carrier firewalls). WITHOUT a TURN
+  //         server, peers on such networks see "incoming connection" but
+  //         the data channel never opens — exactly the bug we hit.
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+      // Free public TURN (Open Relay Project)
+      { urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+    ],
+  },
 };
 
 function makeCode() {
@@ -58,20 +78,52 @@ export class Network {
 
     const hash = window.location.hash.slice(1);
     if (hash.length === 6) {
-      return this._joinRoom(hash);
-    } else {
-      const code = makeCode();
-      window.location.hash = code;
-      return this._createRoom(code);
+      // Existing room code in URL — try to JOIN first; if no host is there,
+      // claim the room ourselves. Makes the room code durable across reloads
+      // and tolerant of the host's tab closing.
+      return this._joinThenHost(hash);
+    }
+    // Brand-new room: pick a random code and host it.
+    const code = makeCode();
+    window.location.hash = code;
+    return this._createRoom(code, /* allowRebrand */ true);
+  }
+
+  // Try joining the room; on failure, become the host of that same room.
+  async _joinThenHost(code) {
+    try {
+      return await this._joinRoom(code);
+    } catch (err) {
+      console.log('[net] no host found for', code, '— promoting self to host (',
+                  err?.message || err?.type, ')');
+    }
+    // Tear down the failed joiner peer before claiming
+    try { this.peer?.destroy(); } catch {}
+    this.peer = null;
+
+    try {
+      // Don't auto-rebrand to a fresh code — we want to KEEP this room code
+      // so anyone who already has the link can still join us.
+      return await this._createRoom(code, /* allowRebrand */ false);
+    } catch (err) {
+      if (err?.type === 'unavailable-id') {
+        // Someone else just claimed the room while we were flipping. Join them.
+        console.log('[net] room got claimed by another host mid-flip — joining instead');
+        try { this.peer?.destroy(); } catch {}
+        this.peer = null;
+        return this._joinRoom(code);
+      }
+      throw err;
     }
   }
 
   // ── HOST ─────────────────────────────────────────────────────
-  _createRoom(code) {
+  _createRoom(code, allowRebrand = true) {
     return new Promise((resolve, reject) => {
       this.isHost = true;
       this.peer   = new Peer(PEER_PREFIX + code, PEER_CFG);
-      console.log('[net] hosting room', code, '(peerId =', PEER_PREFIX + code, ')');
+      console.log('[net] hosting room', code, '(peerId =', PEER_PREFIX + code,
+                  ', allowRebrand =', allowRebrand, ')');
 
       this.peer.on('open', () => {
         this.myId = code;
@@ -86,13 +138,14 @@ export class Network {
       });
       this.peer.on('error', err => {
         console.warn('[net] host peer error:', err?.type, err?.message);
-        if (err.type === 'unavailable-id') {
-          // code taken → try a new one
+        if (err.type === 'unavailable-id' && allowRebrand) {
+          // Only rebrand to a fresh code for brand-new rooms. Never rebrand
+          // when we're trying to claim a specific URL-provided code.
           const newCode = makeCode();
           console.log('[net] host id taken — retrying with', newCode);
           window.location.hash = newCode;
           this.peer.destroy();
-          this._createRoom(newCode).then(resolve).catch(reject);
+          this._createRoom(newCode, true).then(resolve).catch(reject);
         } else {
           reject(err);
         }
@@ -103,7 +156,17 @@ export class Network {
   _hostOnConn(conn) {
     const pid = conn.peer;
 
+    // Watchdog: if the data channel doesn't open within 6s of the incoming
+    // connection event, the WebRTC handshake is failing — usually NAT/firewall.
+    const openWatchdog = setTimeout(() => {
+      console.warn('[net] WARN: conn from', pid,
+        'has not opened after 6s — WebRTC data channel is stuck. ' +
+        'Likely cause: NAT/firewall blocking peer-to-peer; TURN relay should kick in.');
+    }, 6000);
+
     conn.on('open', () => {
+      clearTimeout(openWatchdog);
+      console.log('[net] data channel OPEN with', pid);
       this._conns.set(pid, conn);
       if (this.onPeerCount) this.onPeerCount(this._conns.size);
 
@@ -127,12 +190,18 @@ export class Network {
     });
 
     conn.on('close', () => {
+      clearTimeout(openWatchdog);
+      console.log('[net] conn closed for', pid);
       this._conns.delete(pid);
       this._removeRemote(pid);
       this._relay({ t: 'left', from: pid });
       if (this.onPeerCount) this.onPeerCount(this._conns.size);
     });
-    conn.on('error', () => conn.close());
+    conn.on('error', err => {
+      clearTimeout(openWatchdog);
+      console.warn('[net] conn error from', pid, ':', err);
+      conn.close();
+    });
   }
 
   _relay(msg, excludeId = null) {
