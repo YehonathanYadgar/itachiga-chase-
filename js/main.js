@@ -10,6 +10,7 @@ import { Network }      from './network.js';
 import { Viewmodel }    from './viewmodel.js';
 import { M4Viewmodel }  from './m4viewmodel.js';
 import { ShieldPower }  from './shield.js';
+import { KnifeViewmodel } from './knife.js';
 
 // ── Menu music ────────────────────────────────────────────────
 const menuMusic  = document.getElementById('menu-music');
@@ -199,6 +200,10 @@ function startGame(cls, team) {
   // Shield power is exclusive to Joab — null for every other class
   const shield = cls.id === 'joab' ? new ShieldPower(scene, camera) : null;
   document.getElementById('shield-hud').style.display = cls.id === 'joab' ? 'flex' : 'none';
+
+  // Knife (left hand) — Joab only, always visible in-game
+  const knife = cls.id === 'joab' ? new KnifeViewmodel(camera) : null;
+  if (knife) knife.show();
   const enemies  = spawnEnemies(scene);
   const network  = new Network(scene);
   const ui       = new UI();
@@ -321,6 +326,8 @@ function startGame(cls, team) {
       controls._velZ = 0;
       controls._vy   = 0;
       camera.position.set(0, 1.7, 5); // teleport back to spawn
+      // Joab gets his shield power back fully charged on every respawn
+      if (shield) shield.resetReady();
     }, 15000);
   }
 
@@ -381,6 +388,34 @@ function startGame(cls, team) {
       shooter.startReload();
     }
   });
+
+  // V key → knife stab (Joab only)
+  if (knife) {
+    // Hit check fires at the peak of the stab animation
+    knife.onHitCheck = () => {
+      const meleeRay = new THREE.Raycaster();
+      meleeRay.far   = 2.5;                         // 2.5 m melee range
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      meleeRay.set(camera.position, dir);
+
+      const localMeshes  = enemies.flatMap(e => e.alive ? e.meshes : []);
+      const remoteMeshes = [...network.getMeshMap().keys()];
+      const hits = meleeRay.intersectObjects([...localMeshes, ...remoteMeshes], false);
+
+      if (hits.length > 0) {
+        const mesh  = hits[0].object;
+        const enemy = enemies.find(e => e.meshes.includes(mesh));
+        if (enemy)  { enemy.hit(80); ui.showHit(); }
+        const remote = network.getMeshMap().get(mesh);
+        if (remote) { network.sendHit(remote.id, 80); ui.showHit(); }
+      }
+    };
+
+    document.addEventListener('keydown', e => {
+      if (e.code === 'KeyV' && controls.locked && !isDead) knife.stab();
+    });
+  }
 
   // F key → activate shield power
   document.addEventListener('keydown', e => {
@@ -464,6 +499,7 @@ function startGame(cls, team) {
       if (mouseDown && !shooter.isReloading) doShoot();
       shooter.update(delta);
       if (shield) { shield.update(delta); updateShieldHUD(); }
+      if (knife)  knife.update(delta, controls.moveSpeed);
       viewmodel.update(delta, controls.moveSpeed);
       const ammoDisplay = shooter.isReloading ? 'RELOADING...' : null;
       ui.update(playerHealth, cls.health, shooter.ammo, shooter.maxAmmo, ammoDisplay);

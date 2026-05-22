@@ -14,9 +14,12 @@ export class ShieldPower {
 
     // State
     this.charge      = 0;      // counts 0 → CHARGE_TIME
-    this.isReady     = false;
     this.isActive    = false;
     this.shieldTimer = 0;      // counts 0 → SHIELD_DURATION while active
+
+    // Joab starts every life with the power ALREADY charged and ready
+    this.charge  = CHARGE_TIME;
+    this.isReady = true;
 
     // 3-D objects
     this._wallGroup       = new THREE.Group();
@@ -31,21 +34,21 @@ export class ShieldPower {
   // ── Build the glowing wall (3 stacked planes for a bloom effect) ─────────
   _buildWall() {
     // Core: solid-ish white  ← bigger so it actually covers Joab's body
-    const geo  = new THREE.PlaneGeometry(2.4, 3.4);
+    const geo  = new THREE.PlaneGeometry(2.9, 4.0);
     this._wallCore = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
       color: 0xd8f0ff, transparent: true, opacity: 0,
       depthWrite: false, side: THREE.DoubleSide,
     }));
 
     // Inner glow: slightly larger, additive
-    const geoG = new THREE.PlaneGeometry(3.2, 4.4);
+    const geoG = new THREE.PlaneGeometry(3.8, 5.2);
     this._wallGlow = new THREE.Mesh(geoG, new THREE.MeshBasicMaterial({
       color: 0x80d0ff, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     }));
 
     // Outer bloom: even larger, very faint
-    const geoO = new THREE.PlaneGeometry(4.4, 6.0);
+    const geoO = new THREE.PlaneGeometry(5.2, 7.0);
     this._wallOuter = new THREE.Mesh(geoO, new THREE.MeshBasicMaterial({
       color: 0x3080cc, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
@@ -224,6 +227,23 @@ export class ShieldPower {
   /** Seconds remaining while shield is active */
   get timeLeft() {
     return Math.max(0, SHIELD_DURATION - this.shieldTimer);
+  }
+
+  /**
+   * Called on respawn — hides any active wall and gives the power
+   * back immediately so Joab is always ready at the start of each life.
+   */
+  resetReady() {
+    if (this.isActive) {
+      this.isActive    = false;
+      this.shieldTimer = 0;
+      this._wallGroup.visible = false;
+      for (const p of this._activeParticles) p.mesh.visible = false;
+      this._activeParticles = [];
+      for (const m of this._particlePool) m.visible = false;
+    }
+    this.charge  = CHARGE_TIME;
+    this.isReady = true;
   }
 
   /**
