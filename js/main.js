@@ -167,8 +167,11 @@ function copyToClipboard(text, btn, label = 'Copy link') {
 
 // ── Game ──────────────────────────────────────────────────────
 function startGame(cls, team) {
+  // Hide class-select; show the dedicated invite screen FIRST.
+  // The game overlay only appears after the player clicks "Start Game".
   selectEl.style.display = 'none';
-  overlayEl.style.display = 'flex';
+  const inviteScreen = document.getElementById('invite-screen');
+  inviteScreen.style.display = 'flex';
 
   const { scene, camera, renderer } = createScene();
   const controls  = new Controls(camera, renderer.domElement);
@@ -220,26 +223,44 @@ function startGame(cls, team) {
     }
   });
 
-  // ── P2P connection ────────────────────────────────────────
+  // ── P2P connection (runs on the dedicated invite screen) ──
+  const urlEl    = document.getElementById('overlay-invite-url');
+  const peersEl  = document.getElementById('overlay-peers');
+  const statusEl = document.getElementById('invite-status');
+  const copyBtn  = document.getElementById('overlay-invite-copy');
+  const enterBtn = document.getElementById('enter-game-btn');
+
+  // Live peer count updates on the invite screen
+  network.onPeerCount = (n) => {
+    const total = n + 1;
+    peersEl.textContent = `${total} player${total > 1 ? 's' : ''} in room`;
+  };
+
   network.start(cls, camera, team).then(url => {
-    document.getElementById('overlay-invite-url').textContent = url;
-    document.getElementById('invite-panel').style.display = 'flex';
-    document.getElementById('overlay-invite-copy').onclick = () => {
-      copyToClipboard(url, document.getElementById('overlay-invite-copy'));
-    };
-    network.onPeerCount = (n) => {
-      document.getElementById('overlay-peers').textContent =
-        `${n + 1} player${n + 1 > 1 ? 's' : ''} in room`;
-    };
+    urlEl.textContent = url;
+    statusEl.textContent = network.isHost
+      ? '✅ Hosting — share the link below'
+      : '✅ Connected to host';
+    statusEl.style.color = '#88ff88';
+    console.log('[net] start ok, isHost =', network.isHost, 'url =', url, 'myId =', network.myId);
   }).catch(err => {
-    console.warn('P2P failed, solo mode:', err.message);
-    document.getElementById('overlay-invite-url').textContent = 'P2P unavailable — solo mode';
-    document.getElementById('invite-panel').style.display = 'flex';
+    console.warn('[net] start failed:', err);
+    urlEl.textContent = window.location.href;
+    statusEl.textContent = `⚠️ Couldn't reach host (${err.message || err.type || 'unknown'}) — playing solo`;
+    statusEl.style.color = '#ffaa66';
   });
 
+  // Copy button — own click context, no pointer-lock interference
+  copyBtn.onclick = () => copyToClipboard(urlEl.textContent, copyBtn);
+
+  // "Start Game" — leaves the invite screen and shows the pointer-lock overlay
+  enterBtn.onclick = () => {
+    inviteScreen.style.display = 'none';
+    overlayEl.style.display    = 'flex';
+  };
+
   // ── Pointer lock ──────────────────────────────────────────
-  overlayEl.addEventListener('click', e => {
-    if (e.target.id === 'overlay-invite-copy') return;
+  overlayEl.addEventListener('click', () => {
     controls.lock();
   });
 
@@ -362,7 +383,8 @@ function startGame(cls, team) {
   // F key → activate shield power
   document.addEventListener('keydown', e => {
     if (e.code === 'KeyF' && controls.locked && !isDead) {
-      shield.activate();
+      const activated = shield.activate();
+      if (activated && cls.id === 'joab') playJoabHit();  // JOAB ability SFX
     }
   });
 

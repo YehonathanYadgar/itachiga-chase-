@@ -71,18 +71,25 @@ export class Network {
     return new Promise((resolve, reject) => {
       this.isHost = true;
       this.peer   = new Peer(PEER_PREFIX + code, PEER_CFG);
+      console.log('[net] hosting room', code, '(peerId =', PEER_PREFIX + code, ')');
 
       this.peer.on('open', () => {
         this.myId = code;
         this._startSync();
+        console.log('[net] host peer open, waiting for joiners…');
         resolve(window.location.href);
       });
 
-      this.peer.on('connection', conn => this._hostOnConn(conn));
+      this.peer.on('connection', conn => {
+        console.log('[net] incoming connection from', conn.peer);
+        this._hostOnConn(conn);
+      });
       this.peer.on('error', err => {
+        console.warn('[net] host peer error:', err?.type, err?.message);
         if (err.type === 'unavailable-id') {
           // code taken → try a new one
           const newCode = makeCode();
+          console.log('[net] host id taken — retrying with', newCode);
           window.location.hash = newCode;
           this.peer.destroy();
           this._createRoom(newCode).then(resolve).catch(reject);
@@ -139,27 +146,67 @@ export class Network {
     return new Promise((resolve, reject) => {
       this.isHost = false;
       this.peer   = new Peer(PEER_CFG); // random PeerJS ID
+      console.log('[net] joining room', code, '(target peerId =', PEER_PREFIX + code, ')');
+
+      let settled = false;
+      const settleResolve = (v) => { if (!settled) { settled = true; resolve(v); } };
+      const settleReject  = (e) => { if (!settled) { settled = true; reject(e);  } };
 
       this.peer.on('open', id => {
         this.myId    = id;
+        console.log('[net] joiner peer open, my id =', id, '— dialling host…');
         const conn   = this.peer.connect(PEER_PREFIX + code, { reliable: true });
         this._hostConn = conn;
 
         conn.on('open', () => {
           // Introduce ourselves to host
+          console.log('[net] connected to host', conn.peer);
           conn.send({ t: 'join', name: this.cls.friendName, color: this.cls.bodyColor,
                       health: this.cls.health, maxHealth: this.cls.health, team: this.team });
           this._startSync();
-          resolve(window.location.href);
+          settleResolve(window.location.href);
         });
 
         conn.on('data', msg => this._handle(msg));
-        conn.on('close', () => { /* host left */ });
-        conn.on('error', reject);
+        conn.on('close', () => console.warn('[net] host connection closed'));
+        conn.on('error', err => {
+          console.warn('[net] host connection error:', err);
+          settleReject(err);
+        });
       });
 
-      this.peer.on('error', reject);
-      setTimeout(() => reject(new Error('timeout')), 8000);
+      // Track retries for the (very common) transient "peer-unavailable"
+      // returned while the public PeerJS server is still propagating the
+      // host's peer-id record.
+      let retries = 0;
+      this.peer.on('error', err => {
+        console.warn('[net] joiner peer error:', err?.type, err?.message);
+        if (err?.type === 'peer-unavailable' && retries < 4 && !settled) {
+          retries++;
+          console.log(`[net] host not found yet — retry ${retries}/4 in 1s…`);
+          setTimeout(() => {
+            try {
+              const conn = this.peer.connect(PEER_PREFIX + code, { reliable: true });
+              this._hostConn = conn;
+              conn.on('open', () => {
+                console.log('[net] connected to host (retry)', conn.peer);
+                conn.send({ t: 'join', name: this.cls.friendName, color: this.cls.bodyColor,
+                            health: this.cls.health, maxHealth: this.cls.health, team: this.team });
+                this._startSync();
+                settleResolve(window.location.href);
+              });
+              conn.on('data', msg => this._handle(msg));
+              conn.on('error', e => console.warn('[net] retry conn error:', e));
+            } catch (e) { console.warn('[net] retry threw:', e); }
+          }, 1000);
+          return;
+        }
+        settleReject(err);
+      });
+
+      // Joining can legitimately take a while on the public PeerJS server —
+      // give it more headroom before declaring failure.
+      setTimeout(() => settleReject(new Error('connection timeout — host not responding')), 15000);
     });
   }
 
@@ -279,6 +326,7 @@ export class Network {
   // ── Remote player management ──────────────────────────────────
   _addRemote(id, data) {
     if (this.remote[id]) return;
+    console.log('[net] adding remote player', id, data.name, '(team', data.team + ')');
     this.remote[id] = new RemotePlayer(this.scene, id, data);
     if (this.onPeerCount) this.onPeerCount(Object.keys(this.remote).length);
   }

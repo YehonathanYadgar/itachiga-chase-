@@ -39,19 +39,32 @@
     <button id="music-btn">🔇 Music off</button>
   </div>
 
-  <!-- POINTER LOCK OVERLAY (innerHTML gets replaced on pause — keep invite outside) -->
+  <!-- DEDICATED INVITE SCREEN — shown after class select, before the game.
+       Lives on its own page (no pointer-lock, no canvas, no overlay) so the
+       Copy button has a clean, unambiguous click context. -->
+  <div id="invite-screen" style="display:none">
+    <div class="invite-card">
+      <h2>🔗 Invite Your Friends</h2>
+      <p class="invite-sub" id="invite-status">Setting up room…</p>
+
+      <div class="invite-url-wrap">
+        <code id="overlay-invite-url">…</code>
+      </div>
+
+      <button id="overlay-invite-copy" class="big-btn">📋 Copy Link</button>
+
+      <p class="invite-peers"><span id="overlay-peers">1 player in room</span></p>
+      <p class="invite-hint">Share the link with anyone you want in the lobby, then click below when you're ready.</p>
+
+      <button id="enter-game-btn" class="big-btn primary">▶ Start Game</button>
+    </div>
+  </div>
+
+  <!-- POINTER LOCK OVERLAY (innerHTML gets replaced on pause) -->
   <div id="overlay" style="display:none">
     <h2>Click anywhere to Play</h2>
     <p>WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; Click shoot &nbsp;|&nbsp; <b>SPACE</b> jump &nbsp;|&nbsp; <b>SHIFT</b> sprint &nbsp;|&nbsp; <b>F</b> shield</p>
     <p class="sub">ESC to pause</p>
-  </div>
-
-  <!-- INVITE PANEL — separate div, never clobbered -->
-  <div id="invite-panel" style="display:none">
-    <span>🔗 Invite friends:</span>
-    <span id="overlay-invite-url"></span>
-    <button id="overlay-invite-copy">Copy link</button>
-    <span id="overlay-peers"></span>
   </div>
 
   <!-- HUD -->
