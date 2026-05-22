@@ -53,7 +53,7 @@ export class Shooter {
     if (this.onReloadStart) this.onReloadStart();
   }
 
-  tryShoot(enemies, now, remoteMeshMap = new Map()) {
+  tryShoot(enemies, now, remoteMeshMap = new Map(), blockingMeshes = []) {
     if (!this.canShoot(now)) return false;
     if (this.ammo !== Infinity && this.ammo <= 0) { this.startReload(); return false; }
 
@@ -69,7 +69,9 @@ export class Shooter {
 
     const localMeshes  = enemies.flatMap(e => e.alive ? e.meshes : []);
     const remoteMeshes = [...remoteMeshMap.keys()];
-    const allMeshes    = [...localMeshes, ...remoteMeshes];
+    // blockingMeshes (e.g. Joab's shield wall) are included so the
+    // raycaster sees them — hits are sorted by distance automatically.
+    const allMeshes    = [...localMeshes, ...remoteMeshes, ...blockingMeshes];
 
     for (let p = 0; p < this.pellets; p++) {
       // First pellet always travels exactly where the crosshair points.
@@ -96,14 +98,20 @@ export class Shooter {
       this._spawnBullet(start, visualDir, aimEnd);
 
       if (hitPoint) {
-        const mesh       = hits[0].object;
-        const localEnemy = enemies.find(e => e.meshes.includes(mesh));
-        if (localEnemy) { localEnemy.hit(this.damage); anyHit = true; }
-        if (!localEnemy && remoteMeshMap.has(mesh)) {
-          remoteHitId = remoteMeshMap.get(mesh).id;
-          anyHit = true;
+        const mesh = hits[0].object;
+
+        if (blockingMeshes.includes(mesh)) {
+          // Bullet hits Joab's shield wall — stops here, no damage
+          this._spawnImpact(hitPoint, false);
+        } else {
+          const localEnemy = enemies.find(e => e.meshes.includes(mesh));
+          if (localEnemy) { localEnemy.hit(this.damage); anyHit = true; }
+          if (!localEnemy && remoteMeshMap.has(mesh)) {
+            remoteHitId = remoteMeshMap.get(mesh).id;
+            anyHit = true;
+          }
+          this._spawnImpact(hitPoint, anyHit);
         }
-        this._spawnImpact(hitPoint, anyHit);
       }
     }
 

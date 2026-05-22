@@ -30,22 +30,22 @@ export class ShieldPower {
 
   // ── Build the glowing wall (3 stacked planes for a bloom effect) ─────────
   _buildWall() {
-    // Core: solid-ish white
-    const geo  = new THREE.PlaneGeometry(1.1, 1.8);
+    // Core: solid-ish white  ← bigger so it actually covers Joab's body
+    const geo  = new THREE.PlaneGeometry(1.9, 2.8);
     this._wallCore = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
       color: 0xd8f0ff, transparent: true, opacity: 0,
       depthWrite: false, side: THREE.DoubleSide,
     }));
 
     // Inner glow: slightly larger, additive
-    const geoG = new THREE.PlaneGeometry(1.5, 2.3);
+    const geoG = new THREE.PlaneGeometry(2.6, 3.7);
     this._wallGlow = new THREE.Mesh(geoG, new THREE.MeshBasicMaterial({
       color: 0x80d0ff, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     }));
 
     // Outer bloom: even larger, very faint
-    const geoO = new THREE.PlaneGeometry(2.2, 3.0);
+    const geoO = new THREE.PlaneGeometry(3.6, 5.0);
     this._wallOuter = new THREE.Mesh(geoO, new THREE.MeshBasicMaterial({
       color: 0x3080cc, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
@@ -224,6 +224,14 @@ export class ShieldPower {
   /** Seconds remaining while shield is active */
   get timeLeft() {
     return Math.max(0, SHIELD_DURATION - this.shieldTimer);
+  }
+
+  /**
+   * Returns the wall's solid mesh when active so the raycaster can
+   * treat it as a physical blocker — bullets stop here, no damage.
+   */
+  getBlockingMeshes() {
+    return this.isActive ? [this._wallCore] : [];
   }
 
   dispose() {

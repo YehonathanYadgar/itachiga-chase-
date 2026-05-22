@@ -495,7 +495,7 @@ canvas { display: block; }
   position: absolute;
   bottom: 92px;
   right: 28px;
-  display: flex;
+  display: none; /* shown via JS only when playing as Joab */
   flex-direction: column;
   align-items: center;
   gap: 5px;

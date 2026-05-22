@@ -196,7 +196,9 @@ function startGame(cls, team) {
     shooter.muzzleProvider = () => viewmodel.getNextMuzzlePos();
   }
 
-  const shield   = new ShieldPower(scene, camera);
+  // Shield power is exclusive to Joab — null for every other class
+  const shield = cls.id === 'joab' ? new ShieldPower(scene, camera) : null;
+  document.getElementById('shield-hud').style.display = cls.id === 'joab' ? 'flex' : 'none';
   const enemies  = spawnEnemies(scene);
   const network  = new Network(scene);
   const ui       = new UI();
@@ -325,8 +327,8 @@ function startGame(cls, team) {
   // ── Network callbacks ─────────────────────────────────────
   network.onHit = (dmg) => {
     if (isDead) return;
-    // ── BULLETPROOF while shield is active ──
-    if (shield.isActive) {
+    // ── BULLETPROOF while shield is active (Joab only) ──
+    if (shield && shield.isActive) {
       // Flash cyan instead of red so the player knows the wall absorbed the hit
       const df = document.getElementById('damage-flash');
       df.style.background = 'radial-gradient(ellipse at center, transparent 40%, rgba(0,200,255,0.35) 100%)';
@@ -399,7 +401,8 @@ function startGame(cls, team) {
   const doShoot = () => {
     if (!controls.locked) return;
     if (isDead) return; // dead players can't shoot
-    shooter.tryShoot(enemies, performance.now(), network.getMeshMap());
+    shooter.tryShoot(enemies, performance.now(), network.getMeshMap(),
+                     shield ? shield.getBlockingMeshes() : []);
   };
 
   document.addEventListener('mousedown', e => {
@@ -418,6 +421,7 @@ function startGame(cls, team) {
   const shieldOverEl = document.getElementById('shield-overlay');
 
   function updateShieldHUD() {
+    if (!shield) return;
     // dashoffset: 150.8 = ring empty, 0 = ring fully filled
     shieldRingEl.style.strokeDashoffset = SHIELD_CIRC * (1 - shield.chargeRatio);
 
@@ -459,8 +463,7 @@ function startGame(cls, team) {
 
       if (mouseDown && !shooter.isReloading) doShoot();
       shooter.update(delta);
-      shield.update(delta);
-      updateShieldHUD();
+      if (shield) { shield.update(delta); updateShieldHUD(); }
       viewmodel.update(delta, controls.moveSpeed);
       const ammoDisplay = shooter.isReloading ? 'RELOADING...' : null;
       ui.update(playerHealth, cls.health, shooter.ammo, shooter.maxAmmo, ammoDisplay);
