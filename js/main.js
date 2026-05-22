@@ -69,11 +69,32 @@ function playEmperorShoot() {
   } catch {}
 }
 
+// ── JOAB shoot SFX (polyphonic — dual M4s fire fast) ──────────
+// Same pool pattern as the emperor: at 110 ms fire-rate (×2 guns) a single
+// Audio element would clip; 6 round-robined instances give clean overlap.
+const JOAB_POOL_SIZE = 6;
+const joabShootPool = [];
+for (let i = 0; i < JOAB_POOL_SIZE; i++) {
+  const a = new Audio('assets/joab-shoot.mp3');
+  a.volume = 0.55;
+  joabShootPool.push(a);
+}
+let joabShootIdx = 0;
+function playJoabShoot() {
+  try {
+    const a = joabShootPool[joabShootIdx];
+    joabShootIdx = (joabShootIdx + 1) % JOAB_POOL_SIZE;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch {}
+}
+
 // Map of soundId → local play function. Used both for our own SFX and
 // for SFX broadcast by other players over the network.
 function playNetworkSfx(soundId) {
-  if (soundId === 'emperor-shoot') playEmperorShoot();
-  else if (soundId === 'joab-hit') playJoabHit();
+  if      (soundId === 'emperor-shoot') playEmperorShoot();
+  else if (soundId === 'joab-shoot')    playJoabShoot();
+  else if (soundId === 'joab-hit')      playJoabHit();
 }
 
 musicBtn.addEventListener('click', () => {
@@ -469,11 +490,14 @@ function startGame(cls, team) {
     if (hit) ui.showHit();
     if (remoteHitId) network.sendHit(remoteHitId, cls.damage);
 
-    // Emperor shoot SFX — fires on every shot, including rapid fire.
+    // Per-class shoot SFX — fires on every shot, including rapid fire.
     // Played locally + broadcast so every other player hears it too.
     if (cls.id === 'emperor') {
       playEmperorShoot();
       network.sendSfx('emperor-shoot');
+    } else if (cls.id === 'joab') {
+      playJoabShoot();
+      network.sendSfx('joab-shoot');
     }
   };
 
