@@ -34,21 +34,21 @@ export class ShieldPower {
   // ── Build the glowing wall (3 stacked planes for a bloom effect) ─────────
   _buildWall() {
     // Core: solid-ish white  ← bigger so it actually covers Joab's body
-    const geo  = new THREE.PlaneGeometry(2.9, 4.0);
+    const geo  = new THREE.BoxGeometry(3.2, 4.4, 0.14);
     this._wallCore = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
       color: 0xd8f0ff, transparent: true, opacity: 0,
       depthWrite: false, side: THREE.DoubleSide,
     }));
 
     // Inner glow: slightly larger, additive
-    const geoG = new THREE.PlaneGeometry(3.8, 5.2);
+    const geoG = new THREE.PlaneGeometry(4.1, 5.6);
     this._wallGlow = new THREE.Mesh(geoG, new THREE.MeshBasicMaterial({
       color: 0x80d0ff, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     }));
 
     // Outer bloom: even larger, very faint
-    const geoO = new THREE.PlaneGeometry(5.2, 7.0);
+    const geoO = new THREE.PlaneGeometry(5.8, 7.8);
     this._wallOuter = new THREE.Mesh(geoO, new THREE.MeshBasicMaterial({
       color: 0x3080cc, transparent: true, opacity: 0,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,

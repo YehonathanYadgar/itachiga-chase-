@@ -97,6 +97,7 @@ export class KnifeViewmodel {
     this._group.position.copy(REST_POS);
     this._group.rotation.copy(REST_ROT);
     this.camera.add(this._group);
+    this._group.visible = false;   // hidden until V is pressed
     this._visible = true;
   }
 
@@ -108,6 +109,7 @@ export class KnifeViewmodel {
   // ── Trigger a stab (ignored if one is already in progress) ───────────────
   stab() {
     if (!this._visible || this._stabbing) return;
+    if (this._group) this._group.visible = true;   // reveal for the animation
     this._stabbing   = true;
     this._stabT      = 0;
     this._hitChecked = false;
@@ -162,6 +164,7 @@ export class KnifeViewmodel {
       if (p >= 1.0) {
         this._stabbing = false;
         this._stabT    = 0;
+        if (this._group) this._group.visible = false;  // hide after stab
       }
     }
 
