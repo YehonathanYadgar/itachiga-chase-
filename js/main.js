@@ -38,7 +38,7 @@ gameMusic.addEventListener('ended', () => {
   gameMusicTimer = setTimeout(startGameMusic, breakMs);
 });
 
-// ── JOAB hit SFX (plays only when the local JOAB takes damage) ─
+// ── JOAB hit SFX ──────────────────────────────────────────────
 const joabHitSfx = new Audio('assets/joab-hit.mp3');
 joabHitSfx.volume = 0.85;
 function playJoabHit() {
@@ -46,6 +46,34 @@ function playJoabHit() {
     joabHitSfx.currentTime = 0;
     joabHitSfx.play().catch(() => {});
   } catch {}
+}
+
+// ── Galactic Emperor shoot SFX (polyphonic) ───────────────────
+// Emperor fires every 110 ms — a single Audio element would clip rapid
+// shots when we reset currentTime. A small round-robin pool lets several
+// instances overlap so each trigger truly plays.
+const EMPEROR_POOL_SIZE = 6;
+const emperorPool = [];
+for (let i = 0; i < EMPEROR_POOL_SIZE; i++) {
+  const a = new Audio('assets/emperor-shoot.ogg');
+  a.volume = 0.55;
+  emperorPool.push(a);
+}
+let emperorIdx = 0;
+function playEmperorShoot() {
+  try {
+    const a = emperorPool[emperorIdx];
+    emperorIdx = (emperorIdx + 1) % EMPEROR_POOL_SIZE;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  } catch {}
+}
+
+// Map of soundId → local play function. Used both for our own SFX and
+// for SFX broadcast by other players over the network.
+function playNetworkSfx(soundId) {
+  if (soundId === 'emperor-shoot') playEmperorShoot();
+  else if (soundId === 'joab-hit') playJoabHit();
 }
 
 musicBtn.addEventListener('click', () => {
@@ -347,7 +375,10 @@ function startGame(cls, team) {
       return;
     }
     playerHealth = Math.max(0, playerHealth - dmg);
-    if (cls.id === 'joab') playJoabHit();        // JOAB-only damage SFX
+    if (cls.id === 'joab') {
+      playJoabHit();              // play immediately at the source
+      network.sendSfx('joab-hit'); // every other player hears it too
+    }
     if (playerHealth <= 0) handleDeath();
   };
   network.onKill = (name) => {
@@ -373,6 +404,9 @@ function startGame(cls, team) {
     }
   };
   network.onDied = () => handleDeath();          // backup in case network fires it directly
+
+  // Play sounds broadcast by other players (emperor shoot, JOAB hit/ability)
+  network.onSfx = (soundId) => playNetworkSfx(soundId);
 
   // ── Reload callbacks ──────────────────────────────────────
   shooter.onReloadStart = () => {
@@ -417,11 +451,14 @@ function startGame(cls, team) {
     });
   }
 
-  // F key → activate shield power
+  // F key → activate shield power (JOAB only — shield is null otherwise)
   document.addEventListener('keydown', e => {
-    if (e.code === 'KeyF' && controls.locked && !isDead) {
+    if (e.code === 'KeyF' && controls.locked && !isDead && shield) {
       const activated = shield.activate();
-      if (activated && cls.id === 'joab') playJoabHit();  // JOAB ability SFX
+      if (activated && cls.id === 'joab') {
+        playJoabHit();              // local
+        network.sendSfx('joab-hit'); // every other player hears the ability
+      }
     }
   });
 
@@ -431,6 +468,13 @@ function startGame(cls, team) {
     viewmodel.shoot();
     if (hit) ui.showHit();
     if (remoteHitId) network.sendHit(remoteHitId, cls.damage);
+
+    // Emperor shoot SFX — fires on every shot, including rapid fire.
+    // Played locally + broadcast so every other player hears it too.
+    if (cls.id === 'emperor') {
+      playEmperorShoot();
+      network.sendSfx('emperor-shoot');
+    }
   };
 
   const doShoot = () => {

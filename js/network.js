@@ -68,6 +68,7 @@ export class Network {
     this.onPeerCount = null; // (n) => void
     this.onHit       = null; // (dmg) => void  — called when WE take damage
     this.onTeamKill  = null; // (team) => void — a team scored a point
+    this.onSfx       = null; // (soundId) => void — broadcast SFX from another player
   }
 
   // Call once, right after pointer lock. Returns the shareable URL.
@@ -320,6 +321,11 @@ export class Network {
         if (this.onTeamKill) this.onTeamKill(msg.team);
         break;
       }
+      case 'sfx': {
+        // Broadcast SFX — never bounce it back to the sender
+        if (msg.from !== this.myId && this.onSfx) this.onSfx(msg.sound);
+        break;
+      }
       case 'move': {
         this.remote[id]?.moveTo(msg.pos, msg.yaw);
         break;
@@ -376,6 +382,12 @@ export class Network {
     const msg = { t: 'team_kill', from: this.myId, team };
     this._send(msg);
     this._handle(msg); // apply locally too
+  }
+
+  // Broadcast a sound to every other player. The sender does NOT receive
+  // it back — they play the SFX directly at the source for zero latency.
+  sendSfx(soundId) {
+    this._send({ t: 'sfx', from: this.myId, sound: soundId });
   }
 
   sendHit(targetId, dmg) {
