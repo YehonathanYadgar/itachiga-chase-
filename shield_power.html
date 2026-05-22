@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shield Power – Arcade</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+    user-select: none;
+  }
+  canvas {
+    display: block;
+    border: 2px solid #1a3a5a;
+    box-shadow: 0 0 40px rgba(0,150,255,0.25);
+  }
+  #controls {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #445;
+    letter-spacing: 0.4px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<canvas id="c" width="820" height="460"></canvas>
+<div id="controls">
+  ← → / A D  Move &nbsp;·&nbsp; ↑ / W  Jump &nbsp;·&nbsp;
+  <strong style="color:#0cf">SPACE / E</strong>  Activate Shield (charges in 25 s, lasts exactly 10 s) &nbsp;·&nbsp; ENTER  Restart
+</div>
+
+<script>
+'use strict';
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const W = 820, H = 460;
+const GROUND_Y = H - 72;
+
+/* ═══════════════════════════════════════════════════
+   INPUT
+═══════════════════════════════════════════════════ */
+const held    = {};
+const pressed = {};
+window.addEventListener('keydown', e => {
+  if (!held[e.code]) pressed[e.code] = true;
+  held[e.code] = true;
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
+    e.preventDefault();
+});
+window.addEventListener('keyup', e => { held[e.code] = false; });
+
+/* ═══════════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════════ */
+const PW = 34, PH = 58;
+const POWER_CHARGE_TIME = 25;   // seconds to fully charge
+const SHIELD_DURATION   = 10;   // wall exists for EXACTLY 10 seconds
+const WALL_W = 18, WALL_H = 54; // wall dimensions
+
+/* ═══════════════════════════════════════════════════
+   GAME STATE
+═══════════════════════════════════════════════════ */
+let gameState, score, hiScore = 0;
+let player, enemies, bullets, particles;
+let enemyTimer, spawnInterval;
+
+function initGame() {
+  gameState     = 'playing';
+  score         = 0;
+  enemies       = [];
+  bullets       = [];
+  particles     = [];
+  enemyTimer    = 3;
+  spawnInterval = 5;
+
+  player = {
+    x: 140, y: GROUND_Y - PH,
+    vx: 0,  vy: 0,
+    onGround: true,
+    facing: 1,        // 1 = right, -1 = left
+    hp: 3,
+    hurtTimer: 0,
+
+    charge: 0,         // 0 → POWER_CHARGE_TIME
+    chargeReady: false,
+
+    shieldOn: false,
+    shieldTimer: 0,    // counts up to SHIELD_DURATION
+
+    particles: [],     // liquid stream particles
+  };
+}
+
+/* ═══════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════ */
+const rnd  = (a, b) => a + Math.random() * (b - a);
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp= (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+function aabb(ax,ay,aw,ah, bx,by,bw,bh) {
+  return ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
+}
+
+// Real-time wall position: always in front of the player's face
+function wallPos() {
+  const wx = player.facing > 0
+    ? player.x + PW + 7
+    : player.x - WALL_W - 7;
+  const wy = player.y;           // head = top of sprite
+  return { wx, wy };
+}
+
+/* ═══════════════════════════════════════════════════
+   ACTIVATE SHIELD POWER
+═══════════════════════════════════════════════════ */
+function activateShield() {
+  player.charge      = 0;
+  player.chargeReady = false;
+  player.shieldOn    = true;
+  player.shieldTimer = 0;
+
+  // White liquid shoots from the BOTTOM of the body
+  const originX = player.x + PW / 2;
+  const originY = player.y + PH;          // bottom of body
+  const { wx, wy } = wallPos();
+  const targetX = wx + WALL_W / 2;
+  const targetY = wy + WALL_H / 2;
+
+  for (let i = 0; i < 45; i++) {
+    particles.push({
+      type: 'liquid',
+      // bezier start (bottom of body)
+      x0: originX + rnd(-5, 5),
+      y0: originY,
+      // bezier control point (arc up-forward)
+      cx: lerp(originX, targetX, 0.25) + rnd(-18, 18),
+      cy: Math.min(originY, targetY) - rnd(55, 110),
+      // bezier end (wall centre)
+      x1: targetX + rnd(-3, 3),
+      y1: targetY + rnd(-5, 5),
+      t: 0,
+      speed: rnd(1.1, 1.9),
+      delay: i * 0.012,           // stagger launch so it looks like a stream
+      size:  rnd(3, 7),
+    });
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   UPDATE
+═══════════════════════════════════════════════════ */
+function update(dt) {
+
+  // ── Restart ────────────────────────────────────────
+  if (gameState === 'dead') {
+    if (pressed['Enter']) initGame();
+    clearPressed();
+    return;
+  }
+
+  // ── Player movement ────────────────────────────────
+  const goLeft  = held['ArrowLeft']  || held['KeyA'];
+  const goRight = held['ArrowRight'] || held['KeyD'];
+  const doJump  = pressed['ArrowUp'] || pressed['KeyW'];
+  const doPower = pressed['Space']   || pressed['KeyE'];
+
+  const SPEED = 200;
+  player.vx = goRight ? SPEED : goLeft ? -SPEED : 0;
+  if (goRight) player.facing =  1;
+  if (goLeft)  player.facing = -1;
+
+  if (doJump && player.onGround) {
+    player.vy       = -430;
+    player.onGround = false;
+  }
+
+  // Activate shield power
+  if (doPower && player.chargeReady && !player.shieldOn) {
+    activateShield();
+  }
+
+  // Gravity + integration
+  player.vy += 880 * dt;
+  player.x  += player.vx * dt;
+  player.y  += player.vy * dt;
+
+  // Ground
+  const floorY = GROUND_Y - PH;
+  if (player.y >= floorY) {
+    player.y        = floorY;
+    player.vy       = 0;
+    player.onGround = true;
+  } else {
+    player.onGround = false;
+  }
+  player.x = clamp(player.x, 0, W - PW);
+
+  // ── Power charge (only when shield is NOT active) ──
+  if (!player.shieldOn && !player.chargeReady) {
+    player.charge += dt;
+    if (player.charge >= POWER_CHARGE_TIME) {
+      player.charge      = POWER_CHARGE_TIME;
+      player.chargeReady = true;
+    }
+  }
+
+  // ── Shield timer (counts to EXACTLY 10 s) ──────────
+  if (player.shieldOn) {
+    player.shieldTimer += dt;
+    if (player.shieldTimer >= SHIELD_DURATION) {
+      player.shieldOn    = false;
+      player.shieldTimer = 0;
+      // start recharging from 0
+      player.charge = 0;
+    }
+  }
+
+  // ── Hurt invincibility flash ────────────────────────
+  if (player.hurtTimer > 0) player.hurtTimer -= dt;
+
+  // ── Liquid particles ───────────────────────────────
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    if (p.delay > 0) { p.delay -= dt; continue; }
+    if (p.type === 'liquid') {
+      p.t += p.speed * dt;
+      if (p.t >= 1) particles.splice(i, 1);
+    } else if (p.type === 'hit') {
+      p.life -= dt * 3;
+      p.x    += p.vx * dt;
+      p.y    += p.vy * dt;
+      p.vy   += 200 * dt;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  // ── Enemy spawning ─────────────────────────────────
+  enemyTimer -= dt;
+  if (enemyTimer <= 0) {
+    enemyTimer    = spawnInterval;
+    spawnInterval = Math.max(1.8, spawnInterval - 0.1);
+    const fromRight = Math.random() > 0.25;
+    enemies.push({
+      x:     fromRight ? W + 20 : -60,
+      y:     GROUND_Y - 54,
+      w: 38, h: 54,
+      speed: rnd(60, 105) * (fromRight ? -1 : 1),
+      shootTimer:    rnd(0.8, 2.2),
+      shootInterval: rnd(1.4, 2.6),
+    });
+  }
+
+  // ── Enemy logic ────────────────────────────────────
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.x += e.speed * dt;
+    e.shootTimer -= dt;
+    if (e.shootTimer <= 0) {
+      e.shootTimer = e.shootInterval;
+      const tx = player.x + PW / 2;
+      const ty = player.y + PH / 2;
+      const dx = tx - (e.x + e.w / 2);
+      const dy = ty - (e.y + e.h / 2);
+      const len = Math.hypot(dx, dy) || 1;
+      bullets.push({
+        x: e.x + e.w/2 - 5,
+        y: e.y + e.h/2 - 4,
+        vx: dx/len * 290,
+        vy: dy/len * 290,
+        w: 13, h: 8,
+      });
+    }
+    if (e.x > W + 90 || e.x + e.w < -90) enemies.splice(i, 1);
+  }
+
+  // ── Bullet logic ───────────────────────────────────
+  const { wx, wy } = wallPos();
+
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+
+    // Off-screen
+    if (b.x < -40 || b.x > W+40 || b.y < -40 || b.y > H+40) {
+      bullets.splice(i, 1); continue;
+    }
+
+    // Bullet hits WALL → shatter, award points
+    if (player.shieldOn && aabb(b.x, b.y, b.w, b.h, wx, wy, WALL_W, WALL_H)) {
+      spawnHitFx(b.x + b.w/2, b.y + b.h/2);
+      score += 10;
+      bullets.splice(i, 1); continue;
+    }
+
+    // Bullet hits PLAYER
+    // → BULLETPROOF while shield is active (wall OR not, the player is immune)
+    if (!player.shieldOn && player.hurtTimer <= 0
+        && aabb(b.x, b.y, b.w, b.h, player.x, player.y, PW, PH)) {
+      player.hp--;
+      player.hurtTimer = 1.4;
+      spawnHitFx(b.x + b.w/2, b.y + b.h/2, true);
+      bullets.splice(i, 1);
+      if (player.hp <= 0) {
+        hiScore   = Math.max(hiScore, Math.floor(score));
+        gameState = 'dead';
+      }
+      continue;
+    }
+  }
+
+  score += dt * 3;
+  clearPressed();
+}
+
+function spawnHitFx(x, y, isBlood = false) {
+  for (let k = 0; k < 10; k++) {
+    particles.push({
+      type: 'hit',
+      x, y,
+      vx:   rnd(-130, 130),
+      vy:   rnd(-130, 20),
+      size: rnd(2, 5),
+      life: 1,
+      color: isBlood ? `255,${Math.floor(rnd(40,80))},40` : '180,220,255',
+    });
+  }
+}
+
+function clearPressed() {
+  for (const k in pressed) delete pressed[k];
+}
+
+/* ═══════════════════════════════════════════════════
+   DRAW
+═══════════════════════════════════════════════════ */
+function draw() {
+  // Background
+  ctx.fillStyle = '#0e0e1c';
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars
+  for (let s = 0; s < 90; s++) {
+    const bri = 0.2 + ((s * 31) % 7) * 0.08;
+    ctx.fillStyle = `rgba(255,255,255,${bri})`;
+    ctx.fillRect((s * 139.7) % W, (s * 83.1) % (GROUND_Y - 10), 1, 1);
+  }
+
+  // Ground
+  ctx.fillStyle = '#182e20';
+  ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+  ctx.fillStyle = '#25472f';
+  ctx.fillRect(0, GROUND_Y, W, 7);
+  ctx.strokeStyle = '#1d3826';
+  ctx.lineWidth = 1;
+  for (let gx = 0; gx < W; gx += 44) {
+    ctx.beginPath(); ctx.moveTo(gx, GROUND_Y + 7); ctx.lineTo(gx, H); ctx.stroke();
+  }
+
+  drawEnemies();
+  drawBullets();
+  drawLiquidParticles();
+  drawHitParticles();
+  if (player.shieldOn) drawShieldWall();
+  drawPlayer();
+  drawHUD();
+
+  if (gameState === 'dead') drawGameOver();
+}
+
+/* ── Liquid particle trail (bezier arc) ─────────── */
+function drawLiquidParticles() {
+  for (const p of particles) {
+    if (p.type !== 'liquid' || p.delay > 0) continue;
+    const t  = p.t;
+    const mt = 1 - t;
+    // Quadratic bezier position
+    const x  = mt*mt*p.x0 + 2*mt*t*p.cx + t*t*p.x1;
+    const y  = mt*mt*p.y0 + 2*mt*t*p.cy + t*t*p.y1;
+    const a  = (1 - Math.pow(t, 1.5)) * 0.95;
+    const r  = p.size * (1 - t * 0.35);
+
+    // Glow halo
+    ctx.fillStyle = `rgba(140,210,255,${a * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    // Main droplet
+    ctx.fillStyle = `rgba(215,240,255,${a})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Specular
+    ctx.fillStyle = `rgba(255,255,255,${a * 0.65})`;
+    ctx.beginPath();
+    ctx.arc(x - r*0.25, y - r*0.25, r * 0.38, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawHitParticles() {
+  for (const p of particles) {
+    if (p.type !== 'hit') continue;
+    ctx.fillStyle = `rgba(${p.color},${p.life * 0.9})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* ── Shield Wall ──────────────────────────────────── */
+function drawShieldWall() {
+  const { wx, wy } = wallPos();
+  const timeLeft = SHIELD_DURATION - player.shieldTimer;
+  const ratio    = timeLeft / SHIELD_DURATION;
+  const warning  = timeLeft < 3;
+  const flash    = warning && Math.floor(Date.now() / 180) % 2 === 0;
+
+  // Outer glow
+  const grd = ctx.createRadialGradient(
+    wx + WALL_W/2, wy + WALL_H/2, 2,
+    wx + WALL_W/2, wy + WALL_H/2, 44
+  );
+  grd.addColorStop(0, 'rgba(150,215,255,0.55)');
+  grd.addColorStop(1, 'rgba(60,120,255,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(wx - 28, wy - 22, WALL_W + 56, WALL_H + 44);
+
+  // Wall body
+  ctx.fillStyle = flash
+    ? 'rgba(255,130,130,0.93)'
+    : 'rgba(200,232,255,0.93)';
+  roundRect(wx, wy, WALL_W, WALL_H, 3);
+  ctx.fill();
+
+  // Gloss top
+  const gloss = ctx.createLinearGradient(wx, wy, wx, wy + WALL_H * 0.45);
+  gloss.addColorStop(0, 'rgba(255,255,255,0.72)');
+  gloss.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gloss;
+  roundRect(wx + 2, wy + 2, WALL_W - 4, WALL_H * 0.45, 3);
+  ctx.fill();
+
+  // Left edge highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fillRect(wx + 2, wy + 2, 2, WALL_H - 4);
+
+  // Border
+  ctx.strokeStyle = flash ? '#ff7070' : '#8ec5fc';
+  ctx.lineWidth   = 2;
+  roundRect(wx, wy, WALL_W, WALL_H, 3);
+  ctx.stroke();
+
+  // Countdown text inside wall
+  ctx.fillStyle   = 'rgba(0,25,70,0.88)';
+  ctx.font        = 'bold 9px Courier New';
+  ctx.textAlign   = 'center';
+  ctx.fillText(`${timeLeft.toFixed(1)}s`, wx + WALL_W/2, wy + WALL_H/2 + 3);
+
+  // Tiny energy bar on the far edge of the wall
+  const barH = (WALL_H - 8) * ratio;
+  ctx.fillStyle = warning ? 'rgba(255,80,80,0.65)' : 'rgba(0,200,255,0.55)';
+  ctx.fillRect(wx + WALL_W + 3, wy + 4 + (WALL_H - 8 - barH), 4, barH);
+}
+
+/* ── Player ─────────────────────────────────────── */
+function drawPlayer() {
+  // Flicker when hurt
+  if (player.hurtTimer > 0 && Math.floor(player.hurtTimer * 12) % 2 === 0) return;
+
+  ctx.save();
+
+  // Flip canvas for left-facing
+  if (player.facing < 0) {
+    ctx.translate(player.x + PW/2, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(-(player.x + PW/2), 0);
+  }
+
+  const px = player.x, py = player.y;
+
+  // Drop shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(px + PW/2, GROUND_Y + 4, PW/2 + 3, 5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Boots
+  ctx.fillStyle = '#1c2c3a';
+  ctx.fillRect(px + 3,        py + PH - 8, 13, 8);
+  ctx.fillRect(px + PW - 16,  py + PH - 8, 13, 8);
+
+  // Legs
+  ctx.fillStyle = '#1a4e7c';
+  ctx.fillRect(px + 4,       py + PH - 22, 12, 14);
+  ctx.fillRect(px + PW - 16, py + PH - 22, 12, 14);
+
+  // Torso
+  const torsoColor = player.shieldOn ? '#2060a0' : '#1a73b0';
+  ctx.fillStyle = torsoColor;
+  ctx.fillRect(px + 2, py + 18, PW - 4, PH - 40);
+
+  // Chest plate highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.13)';
+  ctx.fillRect(px + 5, py + 20, PW - 18, 9);
+
+  // Shield glow on torso (right side, facing right)
+  if (player.shieldOn) {
+    const pulse = 0.2 + 0.15 * Math.sin(Date.now() * 0.008);
+    const auraGrd = ctx.createLinearGradient(px, py, px + PW, py);
+    auraGrd.addColorStop(0, `rgba(80,180,255,0)`);
+    auraGrd.addColorStop(0.6, `rgba(80,180,255,0)`);
+    auraGrd.addColorStop(1, `rgba(80,180,255,${pulse})`);
+    ctx.fillStyle = auraGrd;
+    ctx.fillRect(px + 2, py + 18, PW - 4, PH - 40);
+  }
+
+  // Back arm
+  ctx.fillStyle = '#155276';
+  ctx.fillRect(px - 7, py + 20, 10, 18);
+  // Front arm (the one near the wall)
+  ctx.fillRect(px + PW - 3, py + 20, 10, 18);
+
+  // Neck
+  ctx.fillStyle = '#e0b890';
+  ctx.fillRect(px + PW/2 - 4, py + 12, 8, 8);
+
+  // Head
+  ctx.fillStyle = '#f0d0a8';
+  ctx.beginPath();
+  ctx.arc(px + PW/2, py + 10, 13, 0, Math.PI*2);
+  ctx.fill();
+
+  // Hair
+  ctx.fillStyle = '#2e1f0f';
+  ctx.beginPath();
+  ctx.arc(px + PW/2, py + 10, 13, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(px + PW/2 - 13, py + 6, 26, 7);
+
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(px + PW/2 + 1, py + 7, 6, 5);
+  ctx.fillRect(px + PW/2 - 7, py + 7, 6, 5);
+  ctx.fillStyle = '#1a252f';
+  ctx.fillRect(px + PW/2 + 2, py + 8, 4, 4);
+  ctx.fillRect(px + PW/2 - 6, py + 8, 4, 4);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(px + PW/2 + 4, py + 8, 1, 1);
+  ctx.fillRect(px + PW/2 - 4, py + 8, 1, 1);
+
+  // Mouth
+  ctx.strokeStyle = '#8a4020';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(px + PW/2 - 4, py + 15);
+  ctx.quadraticCurveTo(px + PW/2, py + 17, px + PW/2 + 4, py + 15);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/* ── Enemies ────────────────────────────────────── */
+function drawEnemies() {
+  for (const e of enemies) {
+    const ex = e.x, ey = e.y;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(ex + e.w/2, GROUND_Y + 4, e.w/2, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Legs
+    ctx.fillStyle = '#641e16';
+    ctx.fillRect(ex + 3,       ey + e.h - 16, 11, 16);
+    ctx.fillRect(ex + e.w - 14, ey + e.h - 16, 11, 16);
+
+    // Body
+    ctx.fillStyle = '#7b241c';
+    ctx.fillRect(ex + 2, ey + 16, e.w - 4, e.h - 32);
+
+    // Arms
+    ctx.fillStyle = '#7b241c';
+    ctx.fillRect(ex - 6, ey + 18, 10, 15);
+    ctx.fillRect(ex + e.w - 4, ey + 18, 10, 15);
+
+    // Head
+    ctx.fillStyle = '#c0392b';
+    ctx.beginPath();
+    ctx.arc(ex + e.w/2, ey + 9, 13, 0, Math.PI*2);
+    ctx.fill();
+
+    // Horns
+    ctx.fillStyle = '#922b21';
+    for (const hx of [-7, 7]) {
+      ctx.beginPath();
+      ctx.moveTo(ex + e.w/2 + hx - 4, ey + 3);
+      ctx.lineTo(ex + e.w/2 + hx,     ey - 10);
+      ctx.lineTo(ex + e.w/2 + hx + 4, ey + 3);
+      ctx.fill();
+    }
+
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(ex + e.w/2 - 5, ey + 8, 4, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(ex + e.w/2 + 5, ey + 8, 4, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ff2200';
+    ctx.beginPath(); ctx.arc(ex + e.w/2 - 5, ey + 8, 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex + e.w/2 + 5, ey + 8, 2.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(ex + e.w/2 - 5, ey + 8, 1.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex + e.w/2 + 5, ey + 8, 1.2, 0, Math.PI*2); ctx.fill();
+
+    // Teeth
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(ex + e.w/2 - 5, ey + 15); ctx.lineTo(ex + e.w/2 + 5, ey + 15); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(ex + e.w/2 - 4, ey + 14, 3, 4);
+    ctx.fillRect(ex + e.w/2 + 1, ey + 14, 3, 4);
+  }
+}
+
+/* ── Bullets ────────────────────────────────────── */
+function drawBullets() {
+  for (const b of bullets) {
+    const angle = Math.atan2(b.vy, b.vx);
+    ctx.save();
+    ctx.translate(b.x + b.w/2, b.y + b.h/2);
+    ctx.rotate(angle);
+    // Glow
+    ctx.fillStyle = 'rgba(255,165,20,0.28)';
+    ctx.beginPath(); ctx.ellipse(0, 0, b.w, b.h, 0, 0, Math.PI*2); ctx.fill();
+    // Core
+    ctx.fillStyle = '#f5a623';
+    ctx.beginPath(); ctx.ellipse(0, 0, b.w/2, b.h/2, 0, 0, Math.PI*2); ctx.fill();
+    // Specular
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath(); ctx.ellipse(-b.w/4, 0, b.w/5, b.h/4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* ── HUD ────────────────────────────────────────── */
+function drawHUD() {
+  // HP hearts
+  ctx.textAlign = 'left';
+  for (let h = 0; h < 3; h++) {
+    ctx.fillStyle = h < player.hp ? '#e74c3c' : '#333';
+    ctx.font = 'bold 17px Courier New';
+    ctx.fillText('♥', 12 + h * 22, 28);
+  }
+
+  // SCORE
+  ctx.textAlign = 'right';
+  ctx.fillStyle  = '#f1c40f';
+  ctx.font       = 'bold 18px Courier New';
+  ctx.fillText(`SCORE: ${Math.floor(score)}`, W - 12, 28);
+  if (hiScore > 0) {
+    ctx.fillStyle = '#666';
+    ctx.font      = '12px Courier New';
+    ctx.fillText(`BEST: ${hiScore}`, W - 12, 46);
+  }
+
+  // Power charge bar
+  const bx = 10, by = 36, bw = 215, bh = 18;
+  const cRatio = player.chargeReady ? 1 : player.charge / POWER_CHARGE_TIME;
+  const pulse  = 0.7 + 0.3 * Math.sin(Date.now() * 0.007);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  roundRect(bx, by, bw, bh, 4); ctx.fill();
+
+  if (cRatio > 0) {
+    ctx.fillStyle = player.chargeReady
+      ? `rgba(0,220,255,${pulse})`
+      : 'rgba(25,110,215,0.85)';
+    roundRect(bx, by, bw * cRatio, bh, 4); ctx.fill();
+  }
+  ctx.strokeStyle = player.chargeReady ? '#00ddff' : '#1a4a7a';
+  ctx.lineWidth   = 1.5;
+  roundRect(bx, by, bw, bh, 4); ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 11px Courier New';
+  ctx.textAlign = 'left';
+  if (player.chargeReady) {
+    ctx.fillText('⚡ SHIELD READY!  Press SPACE / E', bx + 5, by + 13);
+  } else if (player.shieldOn) {
+    ctx.fillText('RECHARGING AFTER SHIELD...', bx + 5, by + 13);
+  } else {
+    const remaining = (POWER_CHARGE_TIME - player.charge).toFixed(1);
+    ctx.fillText(`SHIELD CHARGE: ${Math.floor(cRatio*100)}%  (${remaining}s)`, bx + 5, by + 13);
+  }
+
+  // Shield active bar
+  if (player.shieldOn) {
+    const sx2 = 10, sy2 = 60, sw2 = 215, sh2 = 16;
+    const sLeft  = SHIELD_DURATION - player.shieldTimer;
+    const sRatio = sLeft / SHIELD_DURATION;
+    const warn   = sLeft < 3;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    roundRect(sx2, sy2, sw2, sh2, 4); ctx.fill();
+
+    ctx.fillStyle = warn
+      ? `rgba(255,75,75,${0.7 + Math.sin(Date.now()*0.015)*0.3})`
+      : 'rgba(180,230,255,0.85)';
+    roundRect(sx2, sy2, sw2 * sRatio, sh2, 4); ctx.fill();
+
+    ctx.strokeStyle = warn ? '#ff5050' : '#8ec5fc';
+    ctx.lineWidth   = 1.5;
+    roundRect(sx2, sy2, sw2, sh2, 4); ctx.stroke();
+
+    ctx.fillStyle = '#fff';
+    ctx.font      = '11px Courier New';
+    ctx.textAlign = 'left';
+    ctx.fillText(`🛡 SHIELD ACTIVE: ${sLeft.toFixed(1)}s remaining`, sx2 + 5, sy2 + 12);
+  }
+}
+
+/* ── Game Over overlay ───────────────────────────── */
+function drawGameOver() {
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+
+  ctx.fillStyle = '#e74c3c';
+  ctx.font      = 'bold 54px Courier New';
+  ctx.fillText('GAME OVER', W/2, H/2 - 28);
+
+  ctx.fillStyle = '#fff';
+  ctx.font      = '22px Courier New';
+  ctx.fillText(`Score: ${Math.floor(score)}   Best: ${hiScore}`, W/2, H/2 + 20);
+
+  ctx.fillStyle = '#888';
+  ctx.font      = '16px Courier New';
+  ctx.fillText('Press ENTER to play again', W/2, H/2 + 58);
+}
+
+/* ── Rounded rect path helper ─────────────────────── */
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/* ═══════════════════════════════════════════════════
+   MAIN LOOP
+═══════════════════════════════════════════════════ */
+let lastTs = null;
+function loop(ts) {
+  if (lastTs === null) lastTs = ts;
+  const dt = Math.min((ts - lastTs) / 1000, 0.05);
+  lastTs   = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+initGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
