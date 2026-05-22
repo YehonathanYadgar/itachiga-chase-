@@ -442,3 +442,82 @@ canvas { display: block; }
   transition: background 0.15s;
 }
 #winner-reload:hover { background: rgba(255,255,255,0.2); }
+
+/* ── SHIELD POWER HUD (bottom right) ── */
+
+/* Blue screen vignette while shield is active */
+#shield-overlay {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(0,180,255,0.13) 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+/* Container: sits above the KILLS block */
+#shield-hud {
+  position: absolute;
+  bottom: 92px;
+  right: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+}
+
+/* Relative wrapper so the "F" label can be centered over the SVG */
+#shield-icon-wrap {
+  position: relative;
+  width: 60px;
+  height: 60px;
+}
+
+/* The SVG ring — rotated so it fills clockwise from the top */
+#shield-svg {
+  width: 60px;
+  height: 60px;
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 0 7px rgba(0, 200, 255, 0.55));
+}
+
+/* Dim background circle */
+.shield-ring-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.10);
+  stroke-width: 5;
+}
+
+/* The coloured fill ring (stroke-dashoffset is updated by JS every frame) */
+.shield-ring-fill {
+  fill: none;
+  stroke: #00ccff;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dasharray:  150.8;   /* 2 × π × 24 ≈ 150.8 — full circle */
+  stroke-dashoffset: 150.8;   /* starts fully empty */
+  transition: stroke 0.25s;
+}
+
+/* "F" key label centred inside the ring */
+#shield-key-label {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 21px;
+  font-weight: bold;
+  color: #ffffff;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 8px rgba(0, 210, 255, 0.85);
+  pointer-events: none;
+}
+
+/* Small text below the ring: "25s", "READY", or "9.3s" countdown */
+#shield-status-text {
+  font-size: 11px;
+  color: rgba(200, 240, 255, 0.80);
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+  min-height: 14px;
+  text-align: center;
+}

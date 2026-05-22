@@ -42,7 +42,7 @@
   <!-- POINTER LOCK OVERLAY (innerHTML gets replaced on pause — keep invite outside) -->
   <div id="overlay" style="display:none">
     <h2>Click anywhere to Play</h2>
-    <p>WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; Click shoot &nbsp;|&nbsp; <b>SPACE</b> jump &nbsp;|&nbsp; <b>SHIFT</b> sprint</p>
+    <p>WASD move &nbsp;|&nbsp; Mouse aim &nbsp;|&nbsp; Click shoot &nbsp;|&nbsp; <b>SPACE</b> jump &nbsp;|&nbsp; <b>SHIFT</b> sprint &nbsp;|&nbsp; <b>F</b> shield</p>
     <p class="sub">ESC to pause</p>
   </div>
 
@@ -83,6 +83,20 @@
     <div id="hitmarker">✕</div>
     <div id="muzzle-flash"></div>
     <div id="damage-flash"></div>
+    <!-- Blue vignette shown while shield is active -->
+    <div id="shield-overlay"></div>
+
+    <!-- Shield power timer — bottom right -->
+    <div id="shield-hud">
+      <div id="shield-icon-wrap">
+        <svg id="shield-svg" viewBox="0 0 60 60">
+          <circle class="shield-ring-bg"   cx="30" cy="30" r="24"/>
+          <circle class="shield-ring-fill" cx="30" cy="30" r="24" id="shield-ring"/>
+        </svg>
+        <span id="shield-key-label">F</span>
+      </div>
+      <div id="shield-status-text">25s</div>
+    </div>
     <div id="respawn-countdown" style="display:none"></div>
 
     <!-- Invite bar (shown after connecting) -->
